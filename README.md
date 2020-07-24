@@ -126,6 +126,11 @@ optional arguments:
   --phase PHASE         train, val, test, etc. default:train
   --load_path LOAD_PATH
                         The path of load model. default:None
+  --use_pretrain_d USE_PRETRAIN_D
+                        Using pretrain-D model to finetune new model.
+                        default:False
+  --pretrain_path PRETRAIN_PATH
+                        The path of pretrain model. defalut:None
   --model MODEL         chooses which model to use. [cyclegan | pix2pix].
                         default:cyclegan
   --input_nc INPUT_NC   # of input image channels: 3 for RGB and 1 for
@@ -137,19 +142,16 @@ optional arguments:
   --ndf NDF             # of discrim filters in the first conv layer.
                         default:64.
   --no_dropout          no dropout for the generator
-  --mask MASK           use MaskedGenerator. default:False
-  --mask_init_gain MASK_INIT_GAIN
-                        scaling factor for init mask_weight. default:0.02
+  --mask                use MaskedGenerator. default:False
   --mask_weight_decay MASK_WEIGHT_DECAY
-                        weight decay for mask_weight. default:1e-3
+                        weight decay for mask_weight. default:0.0
   --mask_loss_type MASK_LOSS_TYPE
                         The type of mask loss decay [bound | exp | relu].
-                        default:bound
+                        default:relu
+  --unmask_last_upconv UNMASK_LAST_UPCONV
+                        Unmask last upconv or not. default:False
   --update_bound_rule UPDATE_BOUND_RULE
-                        The rule of update bound in mask layer.
-                        default:horse2zebra
-  --threshold THRESHOLD
-                        The threshold for pruning. default:0.01
+                        The rule of update bound in mask layer. default:cube
   --continue_train CONTINUE_TRAIN
                         continue training: load the latest model
   --dataset_mode DATASET_MODE
@@ -159,7 +161,7 @@ optional arguments:
   --serial_batches      if true, takes images in order to make batches,
                         otherwise takes them randomly
   --num_threads NUM_THREADS
-                        # threads for loading data. default:4
+                        # threads for loading data. default:8
   --batch_size BATCH_SIZE
                         input batch size. default:1
   --load_size LOAD_SIZE
@@ -178,6 +180,9 @@ optional arguments:
                         augmentation
   --display_winsize DISPLAY_WINSIZE
                         display window size for both visdom and HTML
+  --block_coeff BLOCK_COEFF
+  --upconv_coeff UPCONV_COEFF
+  --upconv_solo         Only last upconv using update bound
   --display_freq DISPLAY_FREQ
                         frequency of showing training results on screen
   --display_ncols DISPLAY_NCOLS
@@ -199,7 +204,7 @@ optional arguments:
                         [opt.checkpoints_dir]/[opt.name]/web/
   --save_epoch_freq SAVE_EPOCH_FREQ
                         frequency of saving checkpoints at the end of epochs.
-                        default:5
+                        default:1
   --epoch_count EPOCH_COUNT
                         the starting epoch count, we save the model by
                         <epoch_count>, <epoch_count>+<save_latest_freq>, ...
@@ -210,12 +215,12 @@ optional arguments:
                         number of epochs to linearly decay learning rate to
                         zero. default:100
   --lr LR               initial learning rate for adam. default:0.0002
-  --gan_mode GAN_MODE   the type of GAN objective. [vanilla| lsgan | wgangp].
-                        vanilla GAN loss is the cross-entropy objective used
-                        in the original GAN paper.
+  --gan_mode GAN_MODE   the type of GAN objective. [vanilla| lsgan | hinge |
+                        wgangp]. vanilla GAN loss is the cross-entropy
+                        objective used in the original GAN paper.
   --pool_size POOL_SIZE
                         the size of image buffer that stores previously
-                        generated images. default:50
+                        generated images. default:100
   --lr_policy LR_POLICY
                         learning rate policy. [linear | step | plateau |
                         cosine]
@@ -232,8 +237,28 @@ optional arguments:
                         lambda_identity = 0.1. default:0.5
   --lambda_L1 LAMBDA_L1
                         weight for L1 loss. default:100.0
+  --lambda_group_lasso LAMBDA_GROUP_LASSO
+                        weight for group lasso to sparsity resblock.
+                        default:0.00
+  --lambda_distill LAMBDA_DISTILL
+                        weight for distill attention. default:0
+  --lambda_d LAMBDA_D   weight for distill discriminator's feature map.
+                        default:0.0
+  --attention_normal ATTENTION_NORMAL
+                        normalize for attention map
+  --threshold THRESHOLD
+                        The threshold of the removing block. default:0
+  --upconv_bound        bound loss for upconv's mask weight
+  --upconv_relu         contray relu loss for upconv's mask weight
+  --lambda_update_coeff LAMBDA_UPDATE_COEFF
+                        weight for update block's sparsity coeff after every
+                        epoch training
   --ntest NTEST         # of test examples.
   --aspect_ratio ASPECT_RATIO
                         aspect ratio of result images
+  --drn_path DRN_PATH   the path of drm model for mAP computation.
+                        default:~/pretrain/drn-d-105_ms_cityscapes.pth
+  --finetune            Finetune after prune
+  --scratch             Finetune from scratch
 ```
 
