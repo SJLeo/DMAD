@@ -4,109 +4,111 @@
 python train.py 
 --dataroot ../datasets/horse2zebra/ 
 --model cyclegan 
---mask True 
---mask_weight_decay 0.002 
---lambda_update_coeff 2.0 
+--gpu_ids 3 
+--display_id 30 
+--name horse2zebracube_adaptive1_100relutripletbound0.0008 
+--n_epochs 100 
+--n_epochs_decay 100 
+
+--mask 
+--mask_weight_decay 0.0008 
+--lambda_update_coeff 1.0 
 --block_coeff 1.0 
 --upconv_coeff 100.0 
 --upconv_bound 
---gpu_ids 3 
---display_id 30 
---name cube_adaptive2_100relutripletbound0.002 
---n_epochs 100 
---n_epochs_decay 100
 ```
 
 #### Pix2Pix
 
 ```shell
 python train.py 
---dataroot /media/disk2/lishaojie/GAN-Compresss/datasets/edges2shoes/ 
---name mask_pix2pix 
+--dataroot ../datasets/edges2shoes/ 
 --model pix2pix 
---mask True 
---mask_weight_decay 1e-3 
---mask_init_gain 0.1
---update_bound_rule edges2shoes 
---mask_loss_type bound 
+--name mask_pix2pix_edges2shoes  
 --gpu_ids 0 
+--display_id 1
 --n_epochs 5 
 --n_epochs_decay 15 
 --load_size 256 
 --no_flip 
 --batch_size 4
---ngf 64
---save_epoch_freq 1 
---display_id 1
---lr 0.01
---lr_decay linear
+--ngf 64 
+--ndf 128 
+--gan_mode vanilla/hinge 
+
+--mask  
+--mask_weight_decay 1e-3 
 
 python train.py  
 --dataroot ../datasets/cityscapes/ 
 --model pix2pix 
---n_epochs 100 
---n_epochs_decay 150 
---ngf 96 
---ndf 128 
+--name cityscape_pretrain_hinge 
 --gpu_ids 1 
 --display_id 10 
---gan_mode hinge 
---name cityscape_pretrain_hinge 
---direction BtoA
+--n_epochs 100 
+--n_epochs_decay 150 
+--load_size 256 
+--no_flip 
+--ngf 96 
+--ndf 128 
+--gan_mode vanilla/hinge
+--direction BtoA 
+
+--mask  
+--mask_weight_decay 1e-3 
 ```
 
 #### Test
 
 ```shell
 python test.py 
---dataroot /media/disk2/lishaojie/GAN-Compresss/datasets/horse2zebra/ 
---name mask_cyclegan 
+--dataroot ../datasets/horse2zebra/ 
+--name test
 --model cyclegan 
---mask True 
---load_path ./experiments/new_cyclegan/checkpoints/model_best.pth
+--mask 
+--gpu_ids 0
+--load_path ./experiments/horse2zebracube_adaptive1_100relutripletbound0.0008/model_best.pth
 ```
 
 #### Prune
 
 ```shell
 python prune.py
---dataroot /media/disk2/lishaojie/GAN-Compresss/datasets/horse2zebra/ 
---checkpoints_dir ./experiments/horse2zebra3_relu1e-4_distill0.0_unmask
---name pruned
+--dataroot ../datasets/horse2zebra/ 
 --model cyclegan 
---unmask_last_upconv True
---mask True 
---load_path ./experiments/new_cyclegan/checkpoints/model_best.pth
+--mask 
+--checkpoints_dir ./experiments/horse2zebracube_adaptive1_100relutripletbound0.0008
+--name attention
+--load_path ./experiments/horse2zebracube_adaptive1_100relutripletbound0.0008/model_best.pth
+--gpu_ids 0 
+--display_id 1
 
--finetune
--scratch
---n_epochs 50 
---n_epochs_decay 50
---lr 0.0001
+--finetune
+--lambda_distill 100.0
+--pretrain_path ../pretrain/horse2zebra_pretrain.pth
 ```
 
 #### Continue Train
 
 ```shell
 python train.py 
---continue_train True
---epoch_count 6
---load_path ./experiments/new_cyclegan/checkpoints/model_5.pth
---dataroot /media/disk2/lishaojie/GAN-Compresss/datasets/horse2zebra/ 
---name mask_cyclegan 
+--dataroot ../datasets/horse2zebra/ 
 --model cyclegan 
---mask True 
---mask_weight_decay 1e-3 
---mask_grad_clip False
---update_bound_rule horse2zebra 
---mask_loss_type bound 
---gpu_ids 0 
+--gpu_ids 3 
+--display_id 30 
+--name horse2zebracube_adaptive1_100relutripletbound0.0008 
 --n_epochs 100 
---n_epochs_decay 100
---save_epoch_freq 5 
---display_id 1
---lr 0.01
---lr_decay linear
+--n_epochs_decay 100 
+--continue_train True 
+--epoch_count 66 
+--load_path ./experiments/horse2zebracube_adaptive1_100relutripletbound0.0008/checkpoints/model_65.pth
+
+--mask 
+--mask_weight_decay 0.0008 
+--lambda_update_coeff 1.0 
+--block_coeff 1.0 
+--upconv_coeff 100.0 
+--upconv_bound 
 ```
 
 #### Other parameter
