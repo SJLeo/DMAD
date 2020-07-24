@@ -295,7 +295,7 @@ def get_scheduler(optimizer, opt):
 
 def combine_best_model(best_AtoB_epoch, best_BtoA_epoch, source_path, target_path, type):
 
-    if type == 'cyclegan':
+    if type == 'cyclegan' or type == 'mobilecyclegan':
         best_AtoB_model = torch.load(os.path.join(source_path, 'model_%d.pth' % best_AtoB_epoch), map_location='cpu')
         best_BtoA_model = torch.load(os.path.join(source_path, 'model_%d.pth' % best_BtoA_epoch), map_location='cpu')
 
@@ -307,7 +307,7 @@ def combine_best_model(best_AtoB_epoch, best_BtoA_epoch, source_path, target_pat
             'fid': (best_AtoB_model['fid'][0], best_BtoA_model['fid'][1])
         }
         torch.save(best_ckpt, os.path.join(target_path, 'model_best.pth'))
-    elif type == 'pix2pix':
+    elif type == 'pix2pix' or type == 'mobilepix2pix':
         best_AtoB_model = torch.load(os.path.join(source_path, 'model_%d.pth' % best_AtoB_epoch), map_location='cpu')
         best_ckpt = {
             'G': best_AtoB_model['G'],

@@ -6,7 +6,8 @@ from metric import get_fid, get_mIoU
 from metric.inception import InceptionV3
 from metric.mIoU_score import DRNSeg
 import utils.util as util
-from models import CycleGAN, MaskCycleGAN, Pix2Pix, MaskPix2Pix, BlockPix2Pix, MaskBlockPix2Pix
+from models import CycleGAN, MaskCycleGAN, Pix2Pix, MaskPix2Pix
+from models import MobileCycleGAN, MaskMobileCycleGAN, MobilePix2Pix, MaskMobilePix2Pix
 
 import os
 import ntpath
@@ -137,6 +138,7 @@ if __name__ == '__main__':
     opt = options.parse()
     opt.isTrain = False
 
+    # create model
     if opt.model == 'cyclegan':
         if opt.mask:
             model = MaskCycleGAN.MaskCycleGANModel(opt)
@@ -150,26 +152,31 @@ if __name__ == '__main__':
             model = MaskPix2Pix.MaskPix2PixModel(opt)
         else:
             model = Pix2Pix.Pix2PixModel(opt)
-    elif opt.model == 'blockpix2pix':
+    elif opt.model == 'mobilecyclegan':
+        if opt.mask:
+            model = MaskMobileCycleGAN.MaskMobileCycleGANModel(opt)
+        else:
+            model = MobileCycleGAN.MobileCycleGANModel(opt)
+    elif opt.model == 'mobilepix2pix':
         opt.norm = 'batch'
         opt.dataset_mode = 'aligned'
         opt.pool_size = 0
         if opt.mask:
-            model = MaskBlockPix2Pix.MaskBlockPix2PixModel(opt)
+            model = MaskMobilePix2Pix.MaskMobilePix2PixModel(opt)
         else:
-            model = BlockPix2Pix.BlockPix2PixModel(opt)
+            model = MobilePix2Pix.MobilePix2PixModel(opt)
     else:
-        raise NotImplementedError('%s not implements!' % opt.model)
+        raise NotImplementedError('%s not implemented' % opt.model)
 
     if opt.load_path is None or not os.path.exists(opt.load_path):
         raise FileExistsError('Load path must be exist!!!')
     model.load_models(opt.load_path)
 
-    if opt.model == 'cyclegan':
+    if opt.model == 'cyclegan' or opt.model == 'mobilecyclegan':
         AtoB_fid, BtoA_fid = test_cyclegan_fid(model, copy.copy(opt))
         print('AtoB FID: %.2f' % AtoB_fid)
         print('BtoA FID: %.2f' % BtoA_fid)
-    elif opt.model == 'pix2pix' or opt.model == 'blockpix2pix':
+    elif opt.model == 'pix2pix' or opt.model == 'mobilepix2pix':
         if 'cityscapes' in opt.dataroot:
             mIoU = test_pix2pix_mIoU(model, copy.copy(opt))
             print('mAP: %.2f' % mIoU)

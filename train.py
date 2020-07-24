@@ -3,6 +3,7 @@ import torch
 from options import options
 from data import create_dataset
 from models import CycleGAN, MaskCycleGAN, Pix2Pix, MaskPix2Pix
+from models import MobileCycleGAN, MaskMobileCycleGAN, MobilePix2Pix, MaskMobilePix2Pix
 from utils.visualizer import Visualizer
 import utils.util as util
 from metric import get_fid, get_mIoU
@@ -160,6 +161,19 @@ if __name__ == '__main__':
             model = MaskPix2Pix.MaskPix2PixModel(opt)
         else:
             model = Pix2Pix.Pix2PixModel(opt)
+    elif opt.model == 'mobilecyclegan':
+        if opt.mask:
+            model = MaskMobileCycleGAN.MaskMobileCycleGANModel(opt)
+        else:
+            model = MobileCycleGAN.MobileCycleGANModel(opt)
+    elif opt.model == 'mobilepix2pix':
+        opt.norm = 'batch'
+        opt.dataset_mode = 'aligned'
+        opt.pool_size = 0
+        if opt.mask:
+            model = MaskMobilePix2Pix.MaskMobilePix2PixModel(opt)
+        else:
+            model = MobilePix2Pix.MobilePix2PixModel(opt)
     else:
         raise NotImplementedError('%s not implemented' % opt.model)
 
@@ -215,7 +229,7 @@ if __name__ == '__main__':
 
         if epoch % opt.save_epoch_freq == 0:
 
-            if opt.model == 'cyclegan':
+            if opt.model == 'cyclegan' or opt.model == 'mobilecyclegan':
                 AtoB_fid, BtoA_fid = test_cyclegan_fid(model, copy.copy(opt))
                 fid = (AtoB_fid, BtoA_fid)
                 logger.info('AtoB FID: %.2f' % AtoB_fid)
@@ -233,7 +247,7 @@ if __name__ == '__main__':
                         best_BtoA_fid = BtoA_fid
                         best_BtoA_epoch = epoch
 
-            elif opt.model == 'pix2pix' or opt.model == 'blockpix2pix':
+            elif opt.model == 'pix2pix' or opt.model == 'mobilepix2pix':
 
                 if 'cityscapes' in opt.dataroot:
                     mIoU = test_pix2pix_mIoU(model, copy.copy(opt))

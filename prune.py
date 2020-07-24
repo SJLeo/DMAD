@@ -4,7 +4,7 @@ import torch
 
 from options import options
 from data import create_dataset
-from models import MaskCycleGAN, MaskPix2Pix, MaskBlockPix2Pix
+from models import MaskCycleGAN, MaskPix2Pix, MaskMobileCycleGAN, MaskMobilePix2Pix
 import utils.util as util
 from metric import get_fid, get_mIoU
 from metric.inception import InceptionV3
@@ -158,6 +158,9 @@ if __name__ == '__main__':
     util.mkdirs(os.path.join(opt.checkpoints_dir, opt.name))
     logger = util.get_logger(os.path.join(opt.checkpoints_dir, opt.name, 'logger.log'))
 
+    if not opt.mask:
+        raise ModuleNotFoundError('options mask must be true')
+
     # create model
     if opt.model == 'cyclegan':
         model = MaskCycleGAN.MaskCycleGANModel(opt)
@@ -166,36 +169,39 @@ if __name__ == '__main__':
         opt.dataset_mode = 'aligned'
         opt.pool_size = 0
         model = MaskPix2Pix.MaskPix2PixModel(opt)
-    elif opt.model == 'blockpix2pix':
+    elif opt.model == 'mobilecyclegan':
+        model = MaskMobileCycleGAN.MaskMobileCycleGANModel(opt)
+    elif opt.model == 'mobilepix2pix':
         opt.norm = 'batch'
         opt.dataset_mode = 'aligned'
         opt.pool_size = 0
-        model = MaskBlockPix2Pix.MaskBlockPix2PixModel(opt)
+        model = MaskMobilePix2Pix.MaskMobilePix2PixModel(opt)
     else:
-        raise NotImplementedError('%s not implements!' % opt.model)
+        raise NotImplementedError('%s not implemented' % opt.model)
 
     if opt.load_path is None or not os.path.exists(opt.load_path):
         raise FileExistsError('Load path must be exist!!!')
     pruned_model = model.prune(opt, logger)
 
-    if opt.model == 'cyclegan':
+    if opt.model == 'cyclegan' or opt.model == 'mobilecyclegan':
         get_flops_parms(model.netG_A, pruned_model.netG_A, opt, logger, name='netG_A', verbose=False)
         get_flops_parms(model.netG_B, pruned_model.netG_B, opt, logger, name='netG_B', verbose=False)
 
-    elif opt.model == 'pix2pix' or opt.model == 'blockpix2pix':
+    elif opt.model == 'pix2pix' or opt.model == 'mobilepix2pix':
         get_flops_parms(model.netG, pruned_model.netG, opt, logger, name='netG', verbose=False)
 
-    if opt.model == 'cyclegan':
+    if opt.model == 'cyclegan' or opt.model == 'mobilecyclegan':
         AtoB_fid, BtoA_fid = test_cyclegan_fid(pruned_model, copy.copy(opt))
         fid = (AtoB_fid, BtoA_fid)
         logger.info('AtoB FID: %.2f' % AtoB_fid)
         logger.info('BtoA FID: %.2f' % BtoA_fid)
-    elif opt.model == 'pix2pix':
-        fid = test_pix2pix_fid(pruned_model, copy.copy(opt))
-        logger.info('FID: %.2f' % fid)
-    elif opt.model == 'blockpix2pix':
-        fid = test_pix2pix_mIoU(pruned_model, copy.copy(opt))
-        logger.info('mAP: %.2f' % fid)
+    elif opt.model == 'pix2pix' or opt.model == 'mobilepix2pix':
+        if 'cityscape' in opt.dataroot:
+            mIOU = test_pix2pix_mIoU(pruned_model, copy.copy(opt))
+            logger.info('mIOU: %.2f' % mIOU)
+        else:
+            fid = test_pix2pix_fid(pruned_model, copy.copy(opt))
+            logger.info('FID: %.2f' % fid)
 
     pruned_model.save_models(0, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'), fid=fid)
 
@@ -260,7 +266,7 @@ if __name__ == '__main__':
 
             if epoch % opt.save_epoch_freq == 0:
 
-                if opt.model == 'cyclegan':
+                if opt.model == 'cyclegan' or opt.model == 'mobilecyclegan':
                     AtoB_fid, BtoA_fid = test_cyclegan_fid(pruned_model, copy.copy(opt))
                     fid = (AtoB_fid, BtoA_fid)
                     logger.info('AtoB FID: %.2f' % AtoB_fid)
@@ -277,12 +283,12 @@ if __name__ == '__main__':
                         best_BtoA_fid = BtoA_fid
                         best_BtoA_epoch = epoch
 
-                elif opt.model == 'pix2pix' or opt.model == 'block_pix2pix':
+                elif opt.model == 'pix2pix' or opt.model == 'mobilepix2pix':
                     if 'cityscapes' in opt.dataroot:
-                        mIoU = test_pix2pix_mIoU(model, copy.copy(opt))
-                        logger.info('mAP: %.2f' % mIoU)
-                        fid = mIoU
-                        if mIoU < best_BtoA_fid:
+                        mIOU = test_pix2pix_mIoU(model, copy.copy(opt))
+                        logger.info('mIOU: %.2f' % mIOU)
+                        fid = mIOU
+                        if mIOU < best_BtoA_fid:
                             model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
                                               fid=fid, isbest=True, direction=opt.direction)
                             best_BtoA_fid = fid
