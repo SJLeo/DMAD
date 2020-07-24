@@ -2,7 +2,7 @@ import torch
 
 from options import options
 from data import create_dataset
-from models import CycleGAN, MaskCycleGAN, Pix2Pix, MaskPix2Pix, BlockPix2Pix, MaskBlockPix2Pix
+from models import CycleGAN, MaskCycleGAN, Pix2Pix, MaskPix2Pix
 from utils.visualizer import Visualizer
 import utils.util as util
 from metric import get_fid, get_mIoU
@@ -160,14 +160,6 @@ if __name__ == '__main__':
             model = MaskPix2Pix.MaskPix2PixModel(opt)
         else:
             model = Pix2Pix.Pix2PixModel(opt)
-    elif opt.model == 'blockpix2pix':
-        opt.norm = 'batch'
-        opt.dataset_mode = 'aligned'
-        opt.pool_size = 0
-        if opt.mask:
-            model = MaskBlockPix2Pix.MaskBlockPix2PixModel(opt)
-        else:
-            model = BlockPix2Pix.BlockPix2PixModel(opt)
     else:
         raise NotImplementedError('%s not implemented' % opt.model)
 
@@ -217,7 +209,7 @@ if __name__ == '__main__':
                 loss_message = visualizer.print_current_losses(epoch, epoch_iter, losses, t_comp, t_data)
                 logger.info(loss_message)
                 if opt.display_id > 0:
-                    visualizer.plot_current_losses(epoch, float(epoch_iter) / dataset_size, losses)
+                    visualizer.plot_current_losses(epoch, float(epoch_iter) / (dataset_size * opt.batch_size), losses)
 
                 iter_data_time = time.time()
 

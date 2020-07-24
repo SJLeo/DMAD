@@ -247,19 +247,12 @@ class MaskCycleGANModel(nn.Module):
         self.fake_A_pool = ImagePool(50)
         self.fake_B_pool = ImagePool(50)
 
-        if self.opt.lambda_distill > 0:
-            print('init distill')
-            self.init_distill()
-
         if self.opt.use_pretrain_d: # using pretrain model's discriminator to initial
             print('using pretrian discriminator')
             self.init_discriminator()
 
 
         self.group_mask_weight_names = []
-        if self.opt.lambda_group_lasso > 0:
-            print('Group Lasso')
-            self.loss_names.append('group_lasso')
         self.group_mask_weight_names.append('model.11')
         for i in range(13, 22, 1):
             self.group_mask_weight_names.append('model.%d.conv_block.8' % i)
@@ -297,12 +290,6 @@ class MaskCycleGANModel(nn.Module):
         self.idt_A = self.netG_A(self.real_B)
         # G_B should be identity if real_A is fed: ||G_B(A) - A||
         self.idt_B = self.netG_B(self.real_A)
-
-        if self.opt.lambda_distill > 0: # extract teacher attention
-            self.teacher_model.netG_A(self.real_A)  # G_A(A)
-            self.teacher_model.netG_B(self.real_B)  # G_B(B)
-            self.teacher_model.netD_A(self.fake_B)
-            self.teacher_model.netD_B(self.fake_A)
 
     def backward_D_basic(self, netD, real, fake):
         """Calculate GAN loss for the discriminator"""
@@ -466,16 +453,6 @@ class MaskCycleGANModel(nn.Module):
         else:
             if self.opt.update_bound_rule == 'cube':
                 bound = 1 - math.pow(float(epoch) / update_bound_epochs_count, 1 / 3)
-            # elif self.opt.update_bound_rule == 'horse2zebra3':
-            #     if epoch <= 50:
-            #         bound = 0.5 / 50 * epoch
-            #     elif epoch <= 100:
-            #         bound = 0.5 + 0.4 / 50 * (epoch - 50)
-            #     elif epoch <= 150:
-            #         bound = 0.9 + 0.1 / 50 * (epoch - 100)
-            #     else:
-            #         bound = 1.0
-            #     bound = 1 - bound
             else:
                 bound = 1 - math.pow(float(epoch) / update_bound_epochs_count, 1 / 2)
 
@@ -511,15 +488,6 @@ class MaskCycleGANModel(nn.Module):
                     mask_weight_loss += module.get_weight_decay_loss()
 
         return mask_weight_loss
-
-    def get_mask_weight_group_loss(self, G):
-
-        group_weights = []
-        for name, module in G.named_modules():
-            if name in self.group_mask_weight_names:
-                group_weights.append(module.mask_weight * ((module.mask_weight > module.bound) & (module.mask_weight < (1.0-module.bound))))
-
-        return util.group_lasso_loss(torch.stack(tuple(group_weights), dim=0))
 
     def init_discriminator(self):
 
@@ -566,96 +534,13 @@ class MaskCycleGANModel(nn.Module):
                 if stable_weight_mask[j]:
                     scale = (mask_weight[j] * stepfunc_params[3] + stepfunc_params[4]) * mask_weight[j] + stepfunc_params[5]
                     if i == len(mask_weight_keys)-1 or (i == len(mask_weight_keys) - 2 and not self.opt.unmask_last_upconv):
-                        state_dict[mask_model_keys[i] + 'weight'][j] *= scale
+                        state_dict[mask_model_keys[i] + 'weight'][:, j, :, :] *= scale
                     else:
                         state_dict[mask_model_keys[i] + 'weight'][j] *= scale
 
                     state_dict[mask_model_keys[i] + 'bias'][j] *= scale
 
         model.load_state_dict(state_dict)
-
-    def init_distill(self):
-        if self.opt.pretrain_path is None or not os.path.exists(self.opt.pretrain_path):
-            raise FileExistsError('The pretrain model path must be exist!!!')
-        new_opt = copy.copy(self.opt)
-        new_opt.lambda_distill = 0.0
-        self.teacher_model = CycleGANModel(new_opt)
-        self.teacher_model.load_models(self.opt.pretrain_path)
-
-        self.loss_names.append('attention_distill')
-
-        self.total_feature_out_AtoB_teacher = {}
-        self.total_feature_out_BtoA_teacher = {}
-        self.total_feature_out_AtoB_student = {}
-        self.total_feature_out_BtoA_student = {}
-        self.total_feature_out_DA_teacher = {}
-        self.total_feature_out_DB_teacher = {}
-
-        self.teacher_extract_G_layers = ['model.9', 'model.12', 'model.15', 'model.18']
-        self.teacher_extract_D_layers = ['model.4', 'model.10']
-        self.student_extract_G_layers = ['model.12', 'model.15', 'model.18', 'model.21']
-
-        def get_activation(maps, name):
-            def get_output_hook(module, input, output):
-                maps[name] = output
-            return get_output_hook
-
-        def add_hook(model, maps, extract_layers):
-            for name, module in model.named_modules():
-                if name in extract_layers:
-                    module.register_forward_hook(get_activation(maps, name))
-
-        add_hook(self.teacher_model.netG_A, self.total_feature_out_AtoB_teacher, self.teacher_extract_G_layers)
-        add_hook(self.teacher_model.netG_B, self.total_feature_out_BtoA_teacher, self.teacher_extract_G_layers)
-        add_hook(self.teacher_model.netD_A, self.total_feature_out_DA_teacher, self.teacher_extract_D_layers)
-        add_hook(self.teacher_model.netD_B, self.total_feature_out_DB_teacher, self.teacher_extract_D_layers)
-        add_hook(self.netG_A, self.total_feature_out_AtoB_student, self.student_extract_G_layers)
-        add_hook(self.netG_B, self.total_feature_out_BtoA_student, self.student_extract_G_layers)
-
-    def distill_loss(self):
-
-        total_attention_AtoB_teacher = [f.pow(2).mean(1, keepdim=True) for f in self.total_feature_out_AtoB_teacher.values()]
-        total_attention_BtoA_teacher = [f.pow(2).mean(1, keepdim=True) for f in self.total_feature_out_BtoA_teacher.values()]
-        total_attention_DA_teacher = [f.pow(2).mean(1, keepdim=True) for f in self.total_feature_out_DA_teacher.values()]
-        total_attention_DB_teacher = [f.pow(2).mean(1, keepdim=True) for f in self.total_feature_out_DB_teacher.values()]
-        total_attention_AtoB_student = [f.pow(2).mean(1, keepdim=True) for f in self.total_feature_out_AtoB_student.values()]
-        total_attention_BtoA_student = [f.pow(2).mean(1, keepdim=True) for f in self.total_feature_out_BtoA_student.values()]
-
-        total_attention_DA_teacher[1] = util.attention_interpolate(total_attention_DA_teacher[1]) # interpolate attention map from 31*31 to 64*64
-        total_attention_DB_teacher[1] = util.attention_interpolate(total_attention_DB_teacher[1])
-
-        total_mixup_attention_AtoB = []
-        total_mixup_attention_BtoA = []
-
-        for i in range(len(total_attention_AtoB_teacher)):
-
-            total_mixup_attention_AtoB.append(util.mixup_attention(
-                [total_attention_AtoB_teacher[i], total_attention_DA_teacher[0], total_attention_DA_teacher[1]],
-                [0.5, 0.25, 0.25]))
-            total_mixup_attention_BtoA.append(util.mixup_attention(
-                [total_attention_BtoA_teacher[i], total_attention_DB_teacher[0], total_attention_DB_teacher[1]],
-                [0.5, 0.25, 0.25]))
-
-        total_distill_loss = 0.0
-        for i in range(len(total_attention_AtoB_teacher)):
-
-            total_distill_loss += util.attention_loss(total_mixup_attention_AtoB[i], total_attention_AtoB_student[i], normalize=self.opt.attention_normal)
-            total_distill_loss += util.attention_loss(total_mixup_attention_BtoA[i], total_attention_BtoA_student[i], normalize=self.opt.attention_normal)
-            # total_distill_loss += util.attention_loss(total_attention_AtoB_teacher[i], total_attention_AtoB_student[i], normalize=normalize)
-            # total_distill_loss += util.attention_loss(total_attention_BtoA_teacher[i], total_attention_BtoA_student[i], normalize=normalize)
-            #
-            # if not self.opt.solo:
-            #     total_distill_loss += util.attention_loss(total_attention_DA_teacher[0],
-            #                                               total_attention_AtoB_student[i], normalize=normalize)
-            #     total_distill_loss += util.attention_loss(total_attention_DA_teacher[1],
-            #                                               total_attention_AtoB_student[i], normalize=normalize)
-            #
-            #     total_distill_loss += util.attention_loss(total_attention_DB_teacher[0],
-            #                                               total_attention_BtoA_student[i], normalize=normalize)
-            #     total_distill_loss += util.attention_loss(total_attention_DB_teacher[1],
-            #                                               total_attention_BtoA_student[i], normalize=normalize)
-
-        return total_distill_loss
 
     def prune(self, opt, logger):
 

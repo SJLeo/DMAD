@@ -5,56 +5,11 @@ from models.GANLoss import GANLoss
 import utils.util as util
 
 import functools
+import copy
 import os
 from collections import OrderedDict
 
 class UnetSkipConnectionBlock(nn.Module):
-
-    # def __init__(self, outer_nc, inner_nc, input_nc=None, submodule=None,
-    #              outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False):
-    #     super(UnetSkipConnectionBlock, self).__init__()
-    #     self.outermost = outermost
-    #     norm_layer = functools.partial(nn.BatchNorm2d, affine=True, track_running_stats=True)
-    #     if type(norm_layer) == functools.partial:
-    #         use_bias = norm_layer.func == nn.InstanceNorm2d
-    #     else:
-    #         use_bias = norm_layer == nn.InstanceNorm2d
-    #     if input_nc is None:
-    #         input_nc = outer_nc
-    #     downconv = nn.Conv2d(input_nc, inner_nc, kernel_size=4,
-    #                          stride=2, padding=1, bias=use_bias)
-    #     downrelu = nn.LeakyReLU(0.2, True)
-    #     downnorm = norm_layer(inner_nc)
-    #     uprelu = nn.ReLU(True)
-    #     upnorm = norm_layer(outer_nc)
-    #
-    #     if outermost:
-    #         upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
-    #                                     kernel_size=4, stride=2,
-    #                                     padding=1)
-    #         down = [downconv]
-    #         up = [uprelu, upconv, nn.Tanh()]
-    #         model = down + [submodule] + up
-    #     elif innermost:
-    #         upconv = nn.ConvTranspose2d(inner_nc, outer_nc,
-    #                                     kernel_size=4, stride=2,
-    #                                     padding=1, bias=use_bias)
-    #         down = [downrelu, downconv]
-    #         up = [uprelu, upconv, upnorm]
-    #         model = down + up
-    #     else:
-    #         upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
-    #                                     kernel_size=4, stride=2,
-    #                                     padding=1, bias=use_bias)
-    #         down = [downrelu, downconv, downnorm]
-    #         up = [uprelu, upconv, upnorm]
-    #
-    #         if use_dropout:
-    #             model = down + [submodule] + up + [nn.Dropout(0.5)]
-    #         else:
-    #             model = down + [submodule] + up
-    #
-    #     self.model = nn.Sequential(*model)
 
     def __init__(self, conv_inchannel, conv_outchannel, upconv_inchannel, upconv_outchannel, submodule=None,
                  outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False):
@@ -108,25 +63,6 @@ class UnetSkipConnectionBlock(nn.Module):
             return torch.cat([x, self.model(x)], 1)
 
 class UnetGenertor(nn.Module):
-
-    # def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, filter_cfg=None, channel_cfg=None):
-    #     super(UnetGenertor, self).__init__()
-    #
-    #
-    #     unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=None,
-    #                                          norm_layer=norm_layer, innermost=True)
-    #     for i in range(num_downs - 5):
-    #         unet_block = UnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=unet_block,
-    #                                              norm_layer=norm_layer, use_dropout=use_dropout)
-    #
-    #     unet_block = UnetSkipConnectionBlock(ngf * 4, ngf * 8, input_nc=None, submodule=unet_block,
-    #                                          norm_layer=norm_layer, use_dropout=use_dropout)
-    #     unet_block = UnetSkipConnectionBlock(ngf * 2, ngf * 4, input_nc=None, submodule=unet_block,
-    #                                          norm_layer=norm_layer, use_dropout=use_dropout)
-    #     unet_block = UnetSkipConnectionBlock(ngf, ngf * 2, input_nc=None, submodule=unet_block,
-    #                                          norm_layer=norm_layer, use_dropout=use_dropout)
-    #     self.model = UnetSkipConnectionBlock(output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True,
-    #                                          norm_layer=norm_layer)
 
     def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False,
                  filter_cfgs=None, channel_cfgs=None):
@@ -227,6 +163,10 @@ class Pix2PixModel(nn.Module):
         self.netD = NLayerDiscriminator(input_nc=3+3, ndf=128)
         self.init_net()
 
+        if self.opt.lambda_distill > 0:
+            print('init distill')
+            self.init_distill()
+
         self.criterionGAN = GANLoss(self.opt.gan_mode).to(self.device)
         self.criterionL1 = nn.L1Loss()
 
@@ -247,6 +187,10 @@ class Pix2PixModel(nn.Module):
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         self.fake_B = self.netG(self.real_A)  # G(A)
+
+        if self.opt.lambda_distill > 0: # extract teacher attention
+            self.teacher_model.netG(self.real_A)  # G(A)
+            self.teacher_model.netD(self.fake_B)
 
     def backward_D(self):
         """Calculate GAN loss for the discriminator"""
@@ -270,8 +214,12 @@ class Pix2PixModel(nn.Module):
         self.loss_G_GAN = self.criterionGAN(pred_fake, True)
         # Second, G(A) = B
         self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
+        # attention distill loss
+        self.loss_attention_distill = 0.
+        if self.opt.lambda_distill > 0:
+            self.loss_attention_distill = self.distill_loss() * self.opt.lambda_distill
         # combine loss and calculate gradients
-        self.loss_G = self.loss_G_GAN + self.loss_G_L1
+        self.loss_G = self.loss_G_GAN + self.loss_G_L1 + self.loss_attention_distill
         self.loss_G.backward()
 
     def optimize_parameters(self):
@@ -318,14 +266,11 @@ class Pix2PixModel(nn.Module):
 
     def load_models(self, load_path):
         ckpt = torch.load(load_path, map_location=self.device)
-        # print(ckpt.keys())
         self.netG.load_state_dict(ckpt['G'])
         self.netD.load_state_dict(ckpt['D'])
 
-        # print('loading the model from %s' % load_path)
-        print('loading the epoch %d model from %s' % (ckpt['epoch'], load_path))
+        print('loading the model from %s' % (load_path))
         return ckpt['fid'], float('inf')
-        # return 0, 0
 
     def init_net(self):
         self.netG.to(self.device)
@@ -358,16 +303,78 @@ class Pix2PixModel(nn.Module):
                 errors_ret[name] = float(getattr(self, 'loss_' + name))
         return errors_ret
 
-    def register_hook(self):
+    def init_distill(self):
+        if self.opt.pretrain_path is None or not os.path.exists(self.opt.pretrain_path):
+            raise FileExistsError('The pretrain model path must be exist!!!')
+        new_opt = copy.copy(self.opt)
+        new_opt.lambda_distill = 0.0
+        self.teacher_model = Pix2PixModel(new_opt)
+        self.teacher_model.load_models(self.opt.pretrain_path)
 
-        self.total_feature_out_G = {}
-        self.total_feature_out_D = {}
+        self.loss_names.append('attention_distill')
 
-        def get_activate(maps, name):
+        self.total_feature_out_teacher = {}
+        self.total_feature_out_student = {}
+        self.total_feature_out_D_teacher = {}
+
+        self.teacher_extract_G_layers = ['model.model.1.model.2',
+                                         'model.model.1.model.3.model.3.model.3.model.2',
+                                         'model.model.1.model.3.model.3.model.3.model.3.model.6',
+                                         'model.model.1.model.3.model.6']
+        self.teacher_extract_D_layers = ['model.4', 'model.10']
+        self.student_extract_G_layers = ['model.model.1.model.2',
+                                         'model.model.1.model.3.model.3.model.3.model.2',
+                                         'model.model.1.model.3.model.3.model.3.model.3.model.6',
+                                         'model.model.1.model.3.model.6']
+
+        def get_activation(maps, name):
             def get_output_hook(module, input, output):
                 maps[name] = output
+
             return get_output_hook
 
-        for name, module in self.netG.named_modules():
-            if isinstance(module, nn.Conv2d) or isinstance(module, nn.ConvTranspose2d):
-                module.register_forward_hook(get_activate(self.total_feature_out_G, name))
+        def add_hook(model, maps, extract_layers):
+            for name, module in model.named_modules():
+                if name in extract_layers:
+                    module.register_forward_hook(get_activation(maps, name))
+
+        add_hook(self.teacher_model.netG, self.total_feature_out_teacher, self.teacher_extract_G_layers)
+        add_hook(self.teacher_model.netD, self.total_feature_out_D_teacher, self.teacher_extract_D_layers)
+        add_hook(self.netG, self.total_feature_out_student, self.student_extract_G_layers)
+
+    def distill_loss(self):
+
+        total_attention_teacher = [f.pow(2).mean(1, keepdim=True) for f in
+                                   self.total_feature_out_teacher.values()]
+        total_attention_D_teacher = [f.pow(2).mean(1, keepdim=True) for f in
+                                     self.total_feature_out_D_teacher.values()]
+        total_attention_student = [f.pow(2).mean(1, keepdim=True) for f in
+                                   self.total_feature_out_student.values()]
+
+        # interpolate D's 31*31 to 64*64 attention map
+        total_attention_D_teacher[1] = util.attention_interpolate(total_attention_D_teacher[1])
+
+        # interpolate D's size to 8*8 attention map
+        total_attention_D_teacher_8x8 = [
+            util.attention_interpolate(total_attention_D_teacher[0], (8, 8)),
+            util.attention_interpolate(total_attention_D_teacher[1], (8, 8))
+        ]
+
+        total_mixup_attention = []
+
+        for i in range(len(total_attention_teacher)):
+            if i == 0 or i == len(total_attention_teacher) - 1: # 64* 64
+                total_mixup_attention.append(util.mixup_attention(
+                    [total_attention_teacher[i], total_attention_D_teacher[0], total_attention_D_teacher[1]],
+                    [0.5, 0.25, 0.25]))
+            else: # 8*8
+                total_mixup_attention.append(util.mixup_attention(
+                    [total_attention_teacher[i], total_attention_D_teacher_8x8[0], total_attention_D_teacher_8x8[1]],
+                    [0.5, 0.25, 0.25]))
+
+        total_distill_loss = 0.0
+        for i in range(len(total_attention_teacher)):
+            total_distill_loss += util.attention_loss(total_mixup_attention[i], total_attention_student[i],
+                                                      normalize=self.opt.attention_normal)
+
+        return total_distill_loss

@@ -1,4 +1,5 @@
 import copy
+import math
 
 import torch
 import torch.nn as nn
@@ -90,9 +91,6 @@ class MaskUnetGenertor(nn.Module):
         self.model = MaskUnetSkipConnectionBlock(output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True,
                                              norm_layer=norm_layer, opt=self.opt)
 
-    def forward(self, x):
-        return self.model(x)
-
     def update_masklayer(self, bound):
         for module in self.modules():
             if isinstance(module, Mask):
@@ -104,10 +102,14 @@ class MaskUnetGenertor(nn.Module):
             if isinstance(module, Mask):
 
                 mask = module.get_current_mask()
+
                 logger.info('%s sparsity ratio: %.2f\tone ratio: %.2f\t'
-                            'total ratio: %.2f' % (name, float(sum(mask == 0.0)) / mask.numel(),
-                                                   float(sum(mask == 1.0)) / mask.numel(),
-                                                   (float(sum(mask == 0.0)) + float(sum(mask == 1.0))) / mask.numel()))
+                      'total ratio: %.2f' % (name, float(sum(mask == 0.0)) / mask.numel(),
+                                              float(sum(mask == 1.0)) / mask.numel(),
+                                             (float(sum(mask == 0.0)) + float(sum(mask == 1.0))) / mask.numel()))
+
+    def forward(self, x):
+        return self.model(x)
 
 class NLayerDiscriminator(nn.Module):
     '''Defines a PatchGAN discriminator'''
@@ -163,10 +165,6 @@ class MaskPix2PixModel(nn.Module):
         self.netD = NLayerDiscriminator(input_nc=3+3, ndf=128)
         self.init_net()
 
-        if self.opt.lambda_distill > 0:
-            print('init distill')
-            self.init_distill()
-
         self.criterionGAN = GANLoss(self.opt.gan_mode).to(self.device)
         self.criterionL1 = nn.L1Loss()
 
@@ -187,10 +185,6 @@ class MaskPix2PixModel(nn.Module):
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         self.fake_B = self.netG(self.real_A)  # G(A)
-
-        if self.opt.lambda_distill > 0:
-            self.teacher_model.netG(self.real_A)
-            self.teacher_model.netD(self.fake_B)
 
     def backward_D(self):
         """Calculate GAN loss for the discriminator"""
@@ -215,14 +209,9 @@ class MaskPix2PixModel(nn.Module):
         # Second, G(A) = B
         self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
         # mask weight decay
-        self.loss_mask_weight = self.get_mask_weight_loss(self.netG)\
-                                * self.opt.mask_weight_decay
-        # attention distill loss
-        self.loss_attention_distill = 0
-        if self.opt.lambda_distill > 0:
-            self.loss_attention_distill = self.distill_loss(normalize=self.opt.attention_normal) * self.opt.lambda_distill
+        self.loss_mask_weight = self.get_mask_weight_loss(self.netG) * self.opt.mask_weight_decay
         # combine loss and calculate gradients
-        self.loss_G = self.loss_G_GAN + self.loss_G_L1 + self.loss_mask_weight + self.loss_attention_distill
+        self.loss_G = self.loss_G_GAN + self.loss_G_L1 + self.loss_mask_weight
         self.loss_G.backward()
 
     def optimize_parameters(self):
@@ -276,8 +265,7 @@ class MaskPix2PixModel(nn.Module):
         if self.opt.isTrain:
             self.update_masklayer(self.opt.epoch_count-1)
 
-        print('loading the epoch %d model from %s' % (ckpt['epoch'], load_path))
-        # print('loading the model from %s' % load_path)
+        print('loading the model from %s' % load_path)
         return ckpt['fid'], float('inf')
 
     def init_net(self):
@@ -313,16 +301,21 @@ class MaskPix2PixModel(nn.Module):
 
     def update_masklayer(self, epoch):
 
-        total_epochs = self.opt.n_epochs + self.opt.n_epochs_decay
+        update_bound_epochs_count = (self.opt.n_epochs + self.opt.n_epochs_decay) * 0.75
 
-        if epoch <= 0.75 * total_epochs:
-
-            xs = [0.0, 0.25 * total_epochs, 0.5 * total_epochs, 0.75 * total_epochs]
-            ys = [0.0, 0.25, 0.45, 0.5]
-            bound_lagrange = lagrange(xs, ys)
-            bound = float(bound_lagrange(epoch))
+        if epoch > update_bound_epochs_count:
+            bound = 0.0
         else:
-            bound = 0.5
+            if self.opt.update_bound_rule == 'cube':
+                bound = 1 - math.pow(float(epoch) / update_bound_epochs_count, 1 / 3)
+            else:
+                bound = 1 - math.pow(float(epoch) / update_bound_epochs_count, 1 / 2)
+
+            if bound < 0:
+                bound = 0.0
+        print('Bound: %.3f' % bound)
+
+        self.stable_weight(self.netG, bound=bound)
         self.netG.update_masklayer(bound)
 
     def print_sparsity_info(self, logger):
@@ -331,91 +324,61 @@ class MaskPix2PixModel(nn.Module):
 
     def get_mask_weight_loss(self, G):
         mask_weight_loss = 0.0
-        for module in G.modules():
+        for name, module in G.named_modules():
             if isinstance(module, Mask):
                 mask_weight_loss += module.get_weight_decay_loss()
-
         return mask_weight_loss
 
-    def init_distill(self):
-        if self.opt.pretrain_path is None or not os.path.exists((self.opt.pretrain_path)):
-            raise FileExistsError('The pretrain model path must be exist!!!')
-        self.teacher_model = Pix2PixModel(self.opt)
-        self.teacher_model.load_models(self.opt.pretrain_path)
+    def stable_weight(self, model, bound):
 
-        self.loss_names.append('attention_distill')
+        stepfunc_params = None
+        last_bound = 1.0
+        for module in model.modules():
+            if isinstance(module, Mask):
+                stepfunc_params = module.stepfunc_params
+                last_bound = module.bound.data
+                break
+        state_dict = model.state_dict()
 
-        self.total_feature_out_teacher = {}
-        self.total_feature_out_student = {}
-        self.total_feature_out_D_teacher = {}
+        mask_model_keys = []
+        mask_model_bn_keys = []
+        mask_weight_keys = []
+        for i in range(7):
+            mask_model_key = 'model.model.1.'
+            for j in range(i):
+                mask_model_key += 'model.4.'
+            mask_model_bn_keys.append(mask_model_key + 'model.2.')
+            if i != 6:
+                mask_weight_keys.append(mask_model_key + 'model.3.mask_weight')
+            else:
+                mask_weight_keys.append(mask_model_key + 'model.2.mask_weight')
 
-        self.teacher_extract_G_layers = ['model.model.1.model.2',
-                                         'model.model.1.model.3.model.3.model.3.model.2',
-                                         'model.model.1.model.3.model.3.model.3.model.3.model.6',
-                                         'model.model.1.model.3.model.6']
-        self.teacher_extract_D_layers = ['model.4', 'model.10']
-        self.student_extract_G_layers = ['model.model.1.model.2',
-                                         'model.model.1.model.3.model.3.model.3.model.2',
-                                         'model.model.1.model.3.model.3.model.3.model.3.model.7',
-                                         'model.model.1.model.3.model.7']
+        mask_model_bn_keys.append('model.model.1.model.4.model.4.model.4.model.4.model.4.model.4.model.5.')
+        mask_weight_keys.append('model.model.1.model.4.model.4.model.4.model.4.model.4.model.4.model.6.mask_weight')
+        for i in range(5, -1, -1):
+            mask_model_key = 'model.model.1.'
+            for j in range(i):
+                mask_model_key += 'model.4.'
+            mask_model_bn_keys.append(mask_model_key + 'model.7.')
+            mask_weight_keys.append(mask_model_key + 'model.8.mask_weight')
 
-        def get_activation(maps, name):
-            def get_output_hook(module, input, output):
-                maps[name] = output
-            return get_output_hook
+        for i, mask_weight_key in enumerate(mask_weight_keys):
 
-        def add_hook(model, maps, extract_layers):
-            for name, module in model.named_modules():
-                if name in extract_layers:
-                    module.register_forward_hook(get_activation(maps, name))
+            mask_weight = state_dict[mask_weight_key]
+            stable_weight_mask = (mask_weight > bound) & (mask_weight <= last_bound)
 
-        add_hook(self.teacher_model.netG, self.total_feature_out_teacher, self.teacher_extract_G_layers)
-        add_hook(self.teacher_model.netD, self.total_feature_out_D_teacher, self.teacher_extract_D_layers)
-        add_hook(self.netG, self.total_feature_out_student, self.student_extract_G_layers)
+            for j in range(len(stable_weight_mask)):
 
-    def distill_loss(self, attention_type='sum_p2', normalize=True):
+                if stable_weight_mask[j]:
+                    scale = (mask_weight[j] * stepfunc_params[3] + stepfunc_params[4]) * mask_weight[j] + stepfunc_params[5]
+                    state_dict[mask_model_bn_keys[i] + 'weight'][j] *= scale
+                    state_dict[mask_model_bn_keys[i] + 'bias'][j] *= scale
 
-        self.total_attention_teacher = [f.pow(2).mean(1, keepdim=True) for f in self.total_feature_out_teacher.values()]
-        self.total_attention_D_teacher = [f.pow(2).mean(1, keepdim=True) for f in self.total_feature_out_D_teacher.values()]
-        self.total_attention_student = [f.pow(2).mean(1, keepdim=True) for f in self.total_feature_out_studnet.values()]
-
-        # interpolate D's 31*31 to 64*64 attention map
-        self.total_attention_D_teacher[1] = util.attention_interpolate(self.total_attention_D_teacher[1])
-
-        # interpolate D's size to 8*8 attention map
-        self.total_attention_D_teacher_8x8 = [
-            util.attention_interpolate(self.total_attention_D_teacher[0], (8, 8)),
-            util.attention_interpolate(self.total_attention_D_teacher[1], (8, 8))
-        ]
-
-        total_distill_loss = 0
-        for i in range(len(self.total_attention_teacher)):
-
-            total_distill_loss += util.attention_loss(self.total_attention_teacher[i], self.total_attention_student[i], normalize=normalize)
-
-        total_distill_loss += util.attention_loss(self.total_attention_D_teacher[0], self.total_attention_student[0],
-                                                  normalize=normalize)
-        total_distill_loss += util.attention_loss(self.total_attention_D_teacher[0], self.total_attention_student[3],
-                                                  normalize=normalize)
-        total_distill_loss += util.attention_loss(self.total_attention_D_teacher[1], self.total_attention_student[0],
-                                                  normalize=normalize)
-        total_distill_loss += util.attention_loss(self.total_attention_D_teacher[1], self.total_attention_student[3],
-                                                  normalize=normalize)
-
-        total_distill_loss += util.attention_loss(self.total_attention_D_teacher_8x8[0], self.total_attention_student[1],
-                                                  normalize=normalize)
-        total_distill_loss += util.attention_loss(self.total_attention_D_teacher_8x8[0], self.total_attention_student[2],
-                                                  normalize=normalize)
-        total_distill_loss += util.attention_loss(self.total_attention_D_teacher_8x8[1], self.total_attention_student[1],
-                                                  normalize=normalize)
-        total_distill_loss += util.attention_loss(self.total_attention_D_teacher_8x8[1], self.total_attention_student[2],
-                                                  normalize=normalize)
-
-        return total_distill_loss
+        model.load_state_dict(state_dict)
 
     def prune(self, opt, logger):
 
-        def get_cfg(state_dict, bound=0.5):
+        def get_cfg(state_dict, bound=0.0):
 
             total_filter_cfgs = []
             total_channel_cfgs = []
@@ -435,7 +398,7 @@ class MaskPix2PixModel(nn.Module):
             total_channel_cfgs.append(self.opt.ngf + total_filter_cfgs[-1]) # outermost
             return total_filter_cfgs, total_channel_cfgs
 
-        def inhert_weight(model, mask_model, bound=0.5):
+        def inhert_weight(model, mask_model, bound=0.0):
 
             state_dict = model.state_dict()
             mask_state_dict = mask_model.state_dict()
@@ -609,14 +572,13 @@ class MaskPix2PixModel(nn.Module):
 
                 last_mask = current_mask
 
-
-            for k, v in state_dict.items():
-                if k not in has_pruned_keys:
-                    print(k)
+            # for k, v in state_dict.items():
+            #     if k not in has_pruned_keys:
+            #         print(k)
             model.load_state_dict(state_dict)
 
-        AtoB_fid, _ = self.load_models(opt.load_path)
-        logger.info('After Training. AtoB FID: %.2f' % AtoB_fid)
+        fid, _ = self.load_models(opt.load_path)
+        logger.info('After Training. FID: %.2f' % fid)
 
         filter_cfgs, channel_cfgs = get_cfg(self.netG.state_dict())
 
@@ -627,7 +589,7 @@ class MaskPix2PixModel(nn.Module):
         new_opt.mask = False
         pruned_model = Pix2PixModel(new_opt, filter_cfgs=filter_cfgs, channel_cfgs=channel_cfgs)
 
-        inhert_weight(pruned_model.netG, self.netG, bound=0.5)
+        inhert_weight(pruned_model.netG, self.netG, bound=0.0)
 
         logger.info('Prune done!!!')
         return pruned_model
