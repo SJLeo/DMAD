@@ -288,4 +288,4 @@ if __name__ == '__main__':
                             source_path=os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
                             target_path=os.path.join(opt.checkpoints_dir, opt.name),
                             type=opt.model)
-    logger.info('Best model save in %s' % os.path.join(opt.chekpoints_dir, opt.name, 'model_best.pth'))
+    logger.info('Best model save in %s' % os.path.join(opt.checkpoints_dir, opt.name, 'model_best.pth'))
