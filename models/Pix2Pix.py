@@ -163,9 +163,12 @@ class Pix2PixModel(nn.Module):
         self.netD = NLayerDiscriminator(input_nc=3+3, ndf=128)
         self.init_net()
 
-        if self.opt.lambda_distill > 0:
-            print('init distill')
-            self.init_distill()
+        if self.opt.lambda_attention_distill > 0:
+            print('init attention distill')
+            self.init_attention_distill()
+        if self.opt.lambda_discriminator_distill > 0:
+            print('init discriminator distill')
+            self.init_discriminator_distill()
 
         self.criterionGAN = GANLoss(self.opt.gan_mode).to(self.device)
         self.criterionL1 = nn.L1Loss()
@@ -188,7 +191,7 @@ class Pix2PixModel(nn.Module):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         self.fake_B = self.netG(self.real_A)  # G(A)
 
-        if self.opt.lambda_distill > 0: # extract teacher attention
+        if self.opt.lambda_attention_distill > 0: # extract teacher attention
             self.teacher_model.netG(self.real_A)  # G(A)
             self.teacher_model.netD(self.fake_B)
 
@@ -215,9 +218,13 @@ class Pix2PixModel(nn.Module):
         # Second, G(A) = B
         self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
         # attention distill loss
-        self.loss_attention_distill = 0.
-        if self.opt.lambda_distill > 0:
-            self.loss_attention_distill = self.distill_loss() * self.opt.lambda_distill
+        self.loss_attention_distill = 0.0
+        if self.opt.lambda_attention_distill > 0:
+            self.loss_attention_distill = self.distill_attention_loss() * self.opt.lambda_attention_distill
+        # discriminator distill loss
+        self.loss_discriminator_distill = 0.0
+        if self.opt.lambda_discriminator_distill > 0:
+            self.loss_discriminator_distill = self.distill_discriminator_loss() * self.opt.lambda_discriminator_distill
         # combine loss and calculate gradients
         self.loss_G = self.loss_G_GAN + self.loss_G_L1 + self.loss_attention_distill
         self.loss_G.backward()
@@ -303,11 +310,12 @@ class Pix2PixModel(nn.Module):
                 errors_ret[name] = float(getattr(self, 'loss_' + name))
         return errors_ret
 
-    def init_distill(self):
+    def init_attention_distill(self):
         if self.opt.pretrain_path is None or not os.path.exists(self.opt.pretrain_path):
             raise FileExistsError('The pretrain model path must be exist!!!')
         new_opt = copy.copy(self.opt)
-        new_opt.lambda_distill = 0.0
+        new_opt.lambda_attention_distill = 0.0
+        new_opt.lambda_discriminator_distill = 0.0
         self.teacher_model = Pix2PixModel(new_opt)
         self.teacher_model.load_models(self.opt.pretrain_path)
 
@@ -342,7 +350,7 @@ class Pix2PixModel(nn.Module):
         add_hook(self.teacher_model.netD, self.total_feature_out_D_teacher, self.teacher_extract_D_layers)
         add_hook(self.netG, self.total_feature_out_student, self.student_extract_G_layers)
 
-    def distill_loss(self):
+    def distill_attention_loss(self):
 
         total_attention_teacher = [f.pow(2).mean(1, keepdim=True) for f in
                                    self.total_feature_out_teacher.values()]

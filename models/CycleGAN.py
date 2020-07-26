@@ -233,8 +233,6 @@ class CycleGANModel(nn.Module):
             self.teacher_model.netD_A(self.fake_B)
             self.teacher_model.netD_B(self.fake_A)
 
-
-
     def backward_D_basic(self, netD, real, fake):
         """Calculate GAN loss for the discriminator"""
         # Real
@@ -392,6 +390,7 @@ class CycleGANModel(nn.Module):
             raise FileExistsError('The pretrain model path must be exist!!!')
         new_opt = copy.copy(self.opt)
         new_opt.lambda_attention_distill = 0.0
+        new_opt.lambda_discriminator_distill = 0.0
         self.teacher_model = CycleGANModel(new_opt)
         self.teacher_model.load_models(self.opt.pretrain_path)
 
@@ -462,43 +461,3 @@ class CycleGANModel(nn.Module):
             total_distill_loss += util.attention_loss(total_mixup_attention_BtoA[i], total_attention_BtoA_student[i],
                                                       normalize=self.opt.attention_normal)
         return total_distill_loss
-
-    def init_discriminator_distill(self):
-
-        if self.opt.pretrain_path is None or not os.path.exists(self.opt.pretrain_path):
-            raise FileExistsError('The pretrain model path must be exist!!!')
-        new_opt = copy.copy(self.opt)
-        new_opt.lambda_discriminator_distill = 0.0
-        self.teacher_model = CycleGANModel(new_opt)
-        self.teacher_model.load_models(self.opt.pretrain_path)
-
-        self.loss_names.append('discriminator_distill')
-
-        self.total_feature_out_AtoB_teacher = {}
-        self.total_feature_out_BtoA_teacher = {}
-        self.total_feature_out_AtoB_student = {}
-        self.total_feature_out_BtoA_student = {}
-        self.total_feature_out_DA_teacher = {}
-        self.total_feature_out_DB_teacher = {}
-
-        self.teacher_extract_G_layers = ['model.9', 'model.12', 'model.15', 'model.18']
-        self.teacher_extract_D_layers = ['model.4', 'model.10']
-        self.student_extract_G_layers = ['model.9', 'model.12', 'model.15', 'model.18']
-
-        def get_activation(maps, name):
-            def get_output_hook(module, input, output):
-                maps[name] = output
-            return get_output_hook
-
-        def add_hook(model, maps, extract_layers):
-            for name, module in model.named_modules():
-                if name in extract_layers:
-                    module.register_forward_hook(get_activation(maps, name))
-
-        add_hook(self.teacher_model.netG_A, self.total_feature_out_AtoB_teacher, self.teacher_extract_G_layers)
-        add_hook(self.teacher_model.netG_B, self.total_feature_out_BtoA_teacher, self.teacher_extract_G_layers)
-        add_hook(self.teacher_model.netD_A, self.total_feature_out_DA_teacher, self.teacher_extract_D_layers)
-        add_hook(self.teacher_model.netD_B, self.total_feature_out_DB_teacher, self.teacher_extract_D_layers)
-        add_hook(self.netG_A, self.total_feature_out_AtoB_student, self.student_extract_G_layers)
-        add_hook(self.netG_B, self.total_feature_out_BtoA_student, self.student_extract_G_layers)
-

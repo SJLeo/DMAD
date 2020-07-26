@@ -198,9 +198,12 @@ class MobileCycleGANModel(nn.Module):
         self.fake_A_pool = ImagePool(50)
         self.fake_B_pool = ImagePool(50)
 
-        if self.opt.lambda_distill > 0:
-            print('init distill')
-            self.init_distill()
+        if self.opt.lambda_attention_distill > 0:
+            print('init attention distill')
+            self.init_attention_distill()
+        if self.opt.lambda_discriminator_distill > 0:
+            print('init discriminator distill')
+            self.init_discriminator_distill()
 
         # define loss functions
         self.criterionGAN= GANLoss(opt.gan_mode).to(self.device)
@@ -236,7 +239,7 @@ class MobileCycleGANModel(nn.Module):
         # G_B should be identity if real_A is fed: ||G_B(A) - A||
         self.idt_B = self.netG_B(self.real_A)
 
-        if self.opt.lambda_distill > 0: # extract teacher attention
+        if self.opt.lambda_attention_distill > 0: # extract teacher attention
             self.teacher_model.netG_A(self.real_A)  # G_A(A)
             self.teacher_model.netG_B(self.real_B)  # G_B(B)
             self.teacher_model.netD_A(self.fake_B)
@@ -283,14 +286,18 @@ class MobileCycleGANModel(nn.Module):
         # Backward cycle loss || G_A(G_B(B)) - B||
         self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
         # attention distill loss
-        self.loss_attention_distill = 0.
-        if self.opt.lambda_distill > 0:
-            self.loss_attention_distill = self.distill_loss() * self.opt.lambda_distill
+        self.loss_attention_distill = 0.0
+        if self.opt.lambda_attention_distill > 0:
+            self.loss_attention_distill = self.distill_attention_loss() * self.opt.lambda_attention_distill
+        # discriminator distill loss
+        self.loss_discriminator_distill = 0.0
+        if self.opt.lambda_discriminator_distill > 0:
+            self.loss_discriminator_distill = self.distill_discriminator_loss() * self.opt.lambda_discriminator_distill
         # combined loss and calculate gradients
         self.loss_G = self.loss_G_A + self.loss_G_B + \
                       self.loss_cycle_A + self.loss_cycle_B + \
                       self.loss_idt_A + self.loss_idt_B + \
-                      self.loss_attention_distill
+                      self.loss_attention_distill + self.loss_discriminator_distill
         self.loss_G.backward()
 
     def optimize_parameters(self):
@@ -389,11 +396,12 @@ class MobileCycleGANModel(nn.Module):
                 errors_ret[name] = float(getattr(self, 'loss_' + name))
         return errors_ret
 
-    def init_distill(self):
+    def init_attention_distill(self):
         if self.opt.pretrain_path is None or not os.path.exists(self.opt.pretrain_path):
             raise FileExistsError('The pretrain model path must be exist!!!')
         new_opt = copy.copy(self.opt)
-        new_opt.lambda_distill = 0.0
+        new_opt.lambda_attention_distill = 0.0
+        new_opt.lambda_discriminator_distill = 0.0
         self.teacher_model = MobileCycleGANModel(new_opt)
         self.teacher_model.load_models(self.opt.pretrain_path)
 
@@ -427,7 +435,7 @@ class MobileCycleGANModel(nn.Module):
         add_hook(self.netG_A, self.total_feature_out_AtoB_student, self.student_extract_G_layers)
         add_hook(self.netG_B, self.total_feature_out_BtoA_student, self.student_extract_G_layers)
 
-    def distill_loss(self):
+    def distill_attention_loss(self):
 
         total_attention_AtoB_teacher = [f.pow(2).mean(1, keepdim=True) for f in
                                         self.total_feature_out_AtoB_teacher.values()]
