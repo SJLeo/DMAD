@@ -251,7 +251,6 @@ class MaskCycleGANModel(nn.Module):
             print('using pretrian discriminator')
             self.init_discriminator()
 
-
         self.group_mask_weight_names = []
         self.group_mask_weight_names.append('model.11')
         for i in range(13, 22, 1):
@@ -398,9 +397,6 @@ class MaskCycleGANModel(nn.Module):
         self.netG_B.load_state_dict(ckpt['G_B'])
         self.netD_A.load_state_dict(ckpt['D_A'])
         self.netD_B.load_state_dict(ckpt['D_B'])
-
-        if self.opt.continue_train:
-            self.update_masklayer(self.opt.epoch_count-1)
 
         print('loading the model from %s' % (load_path))
         return ckpt['fid'][0], ckpt['fid'][1]

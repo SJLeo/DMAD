@@ -179,7 +179,7 @@ if __name__ == '__main__':
     elif opt.model == 'pix2pix' or opt.model == 'mobilepix2pix':
         if 'cityscapes' in opt.dataroot:
             mIoU = test_pix2pix_mIoU(model, copy.copy(opt))
-            print('mAP: %.2f' % mIoU)
+            print('mIoU: %.2f' % mIoU)
         else:
             fid = test_pix2pix_fid(model, copy.copy(opt))
             print('FID: %.2f' % fid)

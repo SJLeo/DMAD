@@ -340,7 +340,6 @@ class MaskPix2PixModel(nn.Module):
                 break
         state_dict = model.state_dict()
 
-        mask_model_keys = []
         mask_model_bn_keys = []
         mask_weight_keys = []
         for i in range(7):

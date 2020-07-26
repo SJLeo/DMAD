@@ -440,7 +440,7 @@ class MaskMobilePix2PixModel(nn.Module):
         mask_model_keys = ['model.1.', 'model.5.', 'model.9.']
         for i in range(13, 22, 1):
             mask_model_keys.append('model.%d.conv_block.1.conv.2.' % i)
-            mask_model_keys.append('model.%d.conv_block.7.conv.2' % i)
+            mask_model_keys.append('model.%d.conv_block.7.conv.2.' % i)
         mask_model_keys.append('model.22.')
 
         mask_weight_keys = ['model.3.mask_weight', 'model.7.mask_weight', 'model.11.mask_weight']

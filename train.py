@@ -177,11 +177,6 @@ if __name__ == '__main__':
     else:
         raise NotImplementedError('%s not implemented' % opt.model)
 
-    if opt.continue_train:
-        if opt.load_path is None or not os.path.exists(opt.load_path):
-            raise FileExistsError('Load path must be exist!!!')
-        best_fid_AtoB, best_fid_BtoA = model.load_models(opt.load_path)
-
     # create dataset
     dataset = create_dataset(opt)
     dataset_size = len(dataset)
@@ -191,6 +186,12 @@ if __name__ == '__main__':
     total_iters = 0
     all_total_iters = dataset_size * opt.batch_size * (opt.n_epochs + opt.n_epochs_decay)
     update_bound_freq = all_total_iters * 0.75 // 150
+
+    if opt.continue_train:
+        if opt.load_path is None or not os.path.exists(opt.load_path):
+            raise FileExistsError('Load path must be exist!!!')
+        best_fid_AtoB, best_fid_BtoA = model.load_models(opt.load_path)
+        total_iters = (opt.epoch_count - 1) * dataset_size * opt.batch_size
 
     for epoch in range(opt.epoch_count, opt.n_epochs + opt.n_epochs_decay + 1):
 
@@ -255,7 +256,7 @@ if __name__ == '__main__':
 
                 if 'cityscapes' in opt.dataroot:
                     mIoU = test_pix2pix_mIoU(model, copy.copy(opt))
-                    logger.info('mAP: %.2f' % mIoU)
+                    logger.info('mIoU: %.2f' % mIoU)
                     fid = mIoU
 
                     if mIoU > best_BtoA_fid and (not opt.mask or (opt.mask and epoch > (opt.n_epochs + opt.n_epochs_decay) * 0.75)):
