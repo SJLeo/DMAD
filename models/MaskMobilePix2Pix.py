@@ -247,6 +247,11 @@ class MaskMobilePix2PixModel(nn.Module):
         self.netD = NLayerDiscriminator(input_nc=3+3, ndf=128)
         self.init_net()
 
+        self.group_mask_weight_names = []
+        self.group_mask_weight_names.append('model.11')
+        for i in range(13, 22, 1):
+            self.group_mask_weight_names.append('model.%d.conv_block.9' % i)
+
         self.criterionGAN = GANLoss(self.opt.gan_mode).to(self.device)
         self.criterionL1 = nn.L1Loss()
 
@@ -317,7 +322,7 @@ class MaskMobilePix2PixModel(nn.Module):
         lr = self.optimizers[0].param_groups[0]['lr']
         print('learning rate = %.7f' % lr)
         self.netG.update_sparsity_factor()
-        self.update_masklayer(epoch)
+        # self.update_masklayer(epoch)
 
     def set_requires_grad(self, nets, requires_grad=False):
         if not isinstance(nets, list):
@@ -382,16 +387,18 @@ class MaskMobilePix2PixModel(nn.Module):
                 errors_ret[name] = float(getattr(self, 'loss_' + name))
         return errors_ret
 
-    def update_masklayer(self, epoch):
+    def update_masklayer(self, current_iter, all_total_iters):
 
-        update_bound_epochs_count = (self.opt.n_epochs + self.opt.n_epochs_decay) * 0.75
-        if epoch > update_bound_epochs_count:
+        update_bound_iters_count = all_total_iters * 0.75
+
+        if current_iter > update_bound_iters_count:
             bound = 0.0
         else:
             if self.opt.update_bound_rule == 'cube':
-                bound = 1 - math.pow(float(epoch) / update_bound_epochs_count, 1 / 3)
+                bound = 1 - math.pow(float(current_iter) / update_bound_iters_count, 1 / 3)
             else:
-                bound = 1 - math.pow(float(epoch) / update_bound_epochs_count, 1 / 2)
+                bound = 1 - math.pow(float(current_iter) / update_bound_iters_count, 1 / 2)
+
             if bound < 0:
                 bound = 0.0
         print('Bound: %.3f' % bound)

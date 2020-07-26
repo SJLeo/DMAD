@@ -234,7 +234,7 @@ class MaskPix2PixModel(nn.Module):
 
         lr = self.optimizers[0].param_groups[0]['lr']
         print('learning rate = %.7f' % lr)
-        self.update_masklayer(epoch)
+        # self.update_masklayer(epoch)
 
     def set_requires_grad(self, nets, requires_grad=False):
         if not isinstance(nets, list):
@@ -299,17 +299,17 @@ class MaskPix2PixModel(nn.Module):
                 errors_ret[name] = float(getattr(self, 'loss_' + name))
         return errors_ret
 
-    def update_masklayer(self, epoch):
+    def update_masklayer(self, current_iter, all_total_iters):
 
-        update_bound_epochs_count = (self.opt.n_epochs + self.opt.n_epochs_decay) * 0.75
+        update_bound_iters_count = all_total_iters * 0.75
 
-        if epoch > update_bound_epochs_count:
+        if current_iter > update_bound_iters_count:
             bound = 0.0
         else:
             if self.opt.update_bound_rule == 'cube':
-                bound = 1 - math.pow(float(epoch) / update_bound_epochs_count, 1 / 3)
+                bound = 1 - math.pow(float(current_iter) / update_bound_iters_count, 1 / 3)
             else:
-                bound = 1 - math.pow(float(epoch) / update_bound_epochs_count, 1 / 2)
+                bound = 1 - math.pow(float(current_iter) / update_bound_iters_count, 1 / 2)
 
             if bound < 0:
                 bound = 0.0

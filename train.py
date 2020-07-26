@@ -189,6 +189,8 @@ if __name__ == '__main__':
 
     visualizer = Visualizer(opt)
     total_iters = 0
+    all_total_iters = dataset_size * opt.batch_size * (opt.n_epochs + opt.n_epochs_decay)
+    update_bound_freq = all_total_iters * 0.75 // 150
 
     for epoch in range(opt.epoch_count, opt.n_epochs + opt.n_epochs_decay + 1):
 
@@ -216,6 +218,9 @@ if __name__ == '__main__':
                 save_result = total_iters % opt.update_html_freq == 0
                 # model.compute_visuals()
                 visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
+
+            if total_iters % update_bound_freq == 0 and opt.mask:
+                model.update_masklayer(current_iter=total_iters, all_total_iters=all_total_iters)
 
             if total_iters % opt.print_freq == 0:
                 losses = model.get_current_losses()
@@ -254,7 +259,7 @@ if __name__ == '__main__':
                     logger.info('mAP: %.2f' % mIoU)
                     fid = mIoU
 
-                    if mIoU < best_BtoA_fid and (not opt.mask or (opt.mask and epoch > (opt.n_epochs + opt.n_epochs_decay) * 0.75)):
+                    if mIoU > best_BtoA_fid and (not opt.mask or (opt.mask and epoch > (opt.n_epochs + opt.n_epochs_decay) * 0.75)):
                         model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
                                           fid=fid, isbest=True, direction=opt.direction)
                         best_BtoA_fid = fid
