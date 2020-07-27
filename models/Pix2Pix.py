@@ -163,6 +163,7 @@ class Pix2PixModel(nn.Module):
         self.netD = NLayerDiscriminator(input_nc=3+3, ndf=128)
         self.init_net()
 
+        self.teacher_model = None
         if self.opt.lambda_attention_distill > 0:
             print('init attention distill')
             self.init_attention_distill()
@@ -191,9 +192,13 @@ class Pix2PixModel(nn.Module):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         self.fake_B = self.netG(self.real_A)  # G(A)
 
-        if self.opt.lambda_attention_distill > 0: # extract teacher attention
-            self.teacher_model.netG(self.real_A)  # G(A)
+        if self.opt.lambda_attention_distill > 0 or self.opt.lambda_discriminator_distill > 0:
+
+            teacher_fake_B = self.teacher_model.netG(self.real_A)  # G(A)
             self.teacher_model.netD(self.fake_B)
+
+            if self.opt.lambda_discriminator_distill > 0:
+                self.teacher_model_discriminator.netD(teacher_fake_B)
 
     def backward_D(self):
         """Calculate GAN loss for the discriminator"""
@@ -385,4 +390,45 @@ class Pix2PixModel(nn.Module):
             total_distill_loss += util.attention_loss(total_mixup_attention[i], total_attention_student[i],
                                                       normalize=self.opt.attention_normal)
 
+        return total_distill_loss
+
+    def init_discriminator_distill(self):
+        if self.opt.pretrain_path is None or not os.path.exists(self.opt.pretrain_path):
+            raise FileExistsError('The pretrain model path must be exist!!!')
+        new_opt = copy.copy(self.opt)
+        new_opt.lambda_attention_distill = 0.0
+        new_opt.lambda_discriminator_distill = 0.0
+        if self.teacher_model is None:
+            self.teacher_model = Pix2PixModel(new_opt)
+            self.teacher_model.load_models(self.opt.pretrain_path)
+        self.teacher_model_discriminator = Pix2PixModel(new_opt)
+        self.teacher_model_discriminator.load_models(self.opt.pretrain_path)
+
+        self.loss_names.append('discriminator_distill')
+
+        self.total_feature_out_D_teacher_discriminator = {}
+        self.total_feature_out_D_student_discriminator = {}
+
+        self.teacher_extract_D_layers_discriminator = ['model.10']
+
+        def get_activation(maps, name):
+            def get_output_hook(module, input, output):
+                maps[name] = output
+            return get_output_hook
+
+        def add_hook(model, maps, extract_layers):
+            for name, module in model.named_modules():
+                if name in extract_layers:
+                    module.register_forward_hook(get_activation(maps, name))
+
+        add_hook(self.teacher_model.netD, self.total_feature_out_D_teacher_discriminator,
+                 self.teacher_extract_D_layers_discriminator)
+        add_hook(self.teacher_model_discriminator.netD, self.total_feature_out_D_student_discriminator,
+                 self.teacher_extract_D_layers_discriminator)
+
+    def distill_discriminator_loss(self):
+
+        total_distill_loss = 0.0
+        for i in self.teacher_extract_D_layers_discriminator:
+            total_distill_loss += torch.norm(self.total_feature_out_D_teacher_discriminator[i] - self.total_feature_out_D_student_discriminator[i], 2)
         return total_distill_loss

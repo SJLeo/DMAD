@@ -186,6 +186,7 @@ class CycleGANModel(nn.Module):
         self.fake_A_pool = ImagePool(50)
         self.fake_B_pool = ImagePool(50)
 
+        self.teacher_model = None
         if self.opt.lambda_attention_distill > 0:
             print('init attention distill')
             self.init_attention_distill()
@@ -227,34 +228,17 @@ class CycleGANModel(nn.Module):
         # G_B should be identity if real_A is fed: ||G_B(A) - A||
         self.idt_B = self.netG_B(self.real_A)
 
-        if self.opt.lambda_attention_distill > 0 and self.opt.lambda_discriminator_distill > 0:
+        if self.opt.lambda_attention_distill > 0 or self.opt.lambda_discriminator_distill > 0:
 
             teacher_fake_B = self.teacher_model.netG_A(self.real_A)  # G_A(A)
             teacher_fake_A = self.teacher_model.netG_B(self.real_B)  # G_B(B)
 
             self.teacher_model.netD_A(self.fake_B)
             self.teacher_model.netD_B(self.fake_A)
-            self.teacher_model_discriminator.netD_A(teacher_fake_B)
-            self.teacher_model_discriminator.netD_B(teacher_fake_A)
-            self.student_model_discriminator.netD_A(self.fake_B)
-            self.student_model_discriminator.netD_B(self.fake_A)
 
-        elif self.opt.lambda_attention_distill > 0 and self.opt.lambda_discriminator_distill == 0:
-
-            self.teacher_model.netG_A(self.real_A)  # G_A(A)
-            self.teacher_model.netG_B(self.real_B)  # G_B(B)
-            self.teacher_model.netD_A(self.fake_B)
-            self.teacher_model.netD_B(self.fake_A)
-
-        elif self.opt.lambda_attention_distill == 0 and self.opt.lambda_discriminator_distill > 0:
-
-            teacher_fake_B = self.teacher_model_discriminator.netG_A(self.real_A)
-            teacher_fake_A = self.teacher_model_discriminator.netG_B(self.real_B)
-
-            self.teacher_model_discriminator.netD_A(teacher_fake_B)
-            self.teacher_model_discriminator.netD_B(teacher_fake_A)
-            self.student_model_discriminator.netD_A(self.fake_B)
-            self.student_model_discriminator.netD_B(self.fake_A)
+            if self.opt.lambda_discriminator_distill > 0:
+                self.teacher_model_discriminator.netD_A(teacher_fake_B)
+                self.teacher_model_discriminator.netD_B(teacher_fake_A)
 
     def backward_D_basic(self, netD, real, fake):
         """Calculate GAN loss for the discriminator"""
@@ -491,10 +475,11 @@ class CycleGANModel(nn.Module):
         new_opt = copy.copy(self.opt)
         new_opt.lambda_attention_distill = 0.0
         new_opt.lambda_discriminator_distill = 0.0
+        if self.teacher_model is None:
+            self.teacher_model = CycleGANModel(new_opt)
+            self.teacher_model.load_models(self.opt.pretrain_path)
         self.teacher_model_discriminator = CycleGANModel(new_opt)
         self.teacher_model_discriminator.load_models(self.opt.pretrain_path)
-        self.student_model_discriminator = CycleGANModel(new_opt)
-        self.student_model_discriminator.load_models(self.opt.pretrain_path)
 
         self.loss_names.append('discriminator_distill')
 
@@ -515,19 +500,19 @@ class CycleGANModel(nn.Module):
                 if name in extract_layers:
                     module.register_forward_hook(get_activation(maps, name))
 
-        add_hook(self.teacher_model_discriminator.netD_A, self.total_feature_out_DA_teacher_discriminator,
+        add_hook(self.teacher_model.netD_A, self.total_feature_out_DA_teacher_discriminator,
                  self.teacher_extract_D_layers_discriminator)
-        add_hook(self.teacher_model_discriminator.netD_B, self.total_feature_out_DB_teacher_discriminator,
+        add_hook(self.teacher_model.netD_B, self.total_feature_out_DB_teacher_discriminator,
                  self.teacher_extract_D_layers_discriminator)
-        add_hook(self.student_model_discriminator.netD_A, self.total_feature_out_DA_student_discriminator,
+        add_hook(self.teacher_model_discriminator.netD_A, self.total_feature_out_DA_student_discriminator,
                  self.teacher_extract_D_layers_discriminator)
-        add_hook(self.student_model_discriminator.netD_B, self.total_feature_out_DB_student_discriminator,
+        add_hook(self.teacher_model_discriminator.netD_B, self.total_feature_out_DB_student_discriminator,
                  self.teacher_extract_D_layers_discriminator)
 
     def distill_discriminator_loss(self):
 
         total_distill_loss = 0.0
-        for i in range(len(self.total_feature_out_DA_teacher_discriminator)):
+        for i in self.teacher_extract_D_layers_discriminator:
             total_distill_loss += torch.norm(self.total_feature_out_DA_teacher_discriminator[i] - self.total_feature_out_DA_student_discriminator[i], 2)
             total_distill_loss += torch.norm(self.total_feature_out_DB_teacher_discriminator[i] - self.total_feature_out_DB_student_discriminator[i], 2)
         return total_distill_loss
