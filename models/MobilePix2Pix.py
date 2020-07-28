@@ -182,6 +182,7 @@ class MobilePix2PixModel(nn.Module):
 
         self.opt = opt
         self.device = torch.device(f'cuda:{opt.gpu_ids[0]}') if len(opt.gpu_ids) > 0 else 'cpu'
+        self.cfg = cfg
         self.loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake']
         self.visual_names = ['real_A', 'fake_B', 'real_B']
 
@@ -293,9 +294,10 @@ class MobilePix2PixModel(nn.Module):
     def save_models(self, epoch, save_dir, fid=None, isbest=False, direction='AtoB'):
         util.mkdirs(save_dir)
         ckpt = {
-            'G': self.netG.state_dict(),
+            'G': self.__pop_ops_params_state_dict(self.netG.state_dict()),
             'D': self.netD.state_dict(),
             'epoch': epoch,
+            'cfg': (self.cfg, None),
             'fid': fid
         }
         if isbest:
@@ -303,9 +305,16 @@ class MobilePix2PixModel(nn.Module):
         else:
             torch.save(ckpt, os.path.join(save_dir, 'model_%d.pth' % epoch))
 
+    def __pop_ops_params_state_dict(self, state_dict):
+
+        for k in list(state_dict.keys()):
+            if str.endswith(k, 'total_ops') or str.endswith(k, 'total_params'):
+                state_dict.pop(k)
+        return state_dict
+
     def load_models(self, load_path):
         ckpt = torch.load(load_path, map_location=self.device)
-        self.netG.load_state_dict(ckpt['G'])
+        self.netG.load_state_dict(self.__pop_ops_params_state_dict(ckpt['G']))
         self.netD.load_state_dict(ckpt['D'])
 
         print('loading the model from %s' % load_path)

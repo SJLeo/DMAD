@@ -304,6 +304,7 @@ def combine_best_model(best_AtoB_epoch, best_BtoA_epoch, source_path, target_pat
             'G_B': best_BtoA_model['G_B'],
             'D_A': best_AtoB_model['D_A'],
             'D_B': best_BtoA_model['D_B'],
+            'cfg': (best_AtoB_model['cfg'][0], best_BtoA_model['cfg'][1]),
             'fid': (best_AtoB_model['fid'][0], best_BtoA_model['fid'][1])
         }
         torch.save(best_ckpt, os.path.join(target_path, 'model_best.pth'))
@@ -312,11 +313,8 @@ def combine_best_model(best_AtoB_epoch, best_BtoA_epoch, source_path, target_pat
         best_ckpt = {
             'G': best_AtoB_model['G'],
             'D': best_AtoB_model['D'],
+            'cfg': best_AtoB_model['cfg'],
             'fid': best_AtoB_model['fid']
         }
         torch.save(best_ckpt, os.path.join(target_path, 'model_best.pth'))
     shutil.rmtree(source_path)
-
-
-
-

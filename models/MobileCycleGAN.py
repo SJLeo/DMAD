@@ -183,6 +183,8 @@ class MobileCycleGANModel(nn.Module):
         super(MobileCycleGANModel, self).__init__()
         self.opt = opt
         self.device = torch.device(f'cuda:{opt.gpu_ids[0]}') if len(opt.gpu_ids) > 0 else 'cpu'
+        self.cfg_AtoB = cfg_AtoB
+        self.cfg_BtoA = cfg_BtoA
         self.loss_names = ['D_A', 'G_A', 'cycle_A', 'idt_A', 'D_B', 'G_B', 'cycle_B', 'idt_B']
         visual_names_A = ['real_A', 'fake_B', 'rec_A', 'idt_B']
         visual_names_B = ['real_B', 'fake_A', 'rec_B', 'idt_A']
@@ -342,11 +344,12 @@ class MobileCycleGANModel(nn.Module):
     def save_models(self, epoch, save_dir, fid=None, isbest=False, direction='AtoB'):
         util.mkdirs(save_dir)
         ckpt = {
-            'G_A': self.netG_A.state_dict(),
-            'G_B': self.netG_B.state_dict(),
+            'G_A': self.__pop_ops_params_state_dict(self.netG_A.state_dict()),
+            'G_B': self.__pop_ops_params_state_dict(self.netG_B.state_dict()),
             'D_A': self.netD_A.state_dict(),
             'D_B': self.netD_B.state_dict(),
             'epoch': epoch,
+            'cfg': (self.cfg_AtoB, self.cfg_BtoA),
             'fid': fid
         }
         if isbest:
@@ -354,10 +357,17 @@ class MobileCycleGANModel(nn.Module):
         else:
             torch.save(ckpt, os.path.join(save_dir, 'model_%d.pth' % epoch))
 
+    def __pop_ops_params_state_dict(self, state_dict):
+
+        for k in list(state_dict.keys()):
+            if str.endswith(k, 'total_ops') or str.endswith(k, 'total_params'):
+                state_dict.pop(k)
+        return state_dict
+
     def load_models(self, load_path):
         ckpt = torch.load(load_path, map_location=self.device)
-        self.netG_A.load_state_dict(ckpt['G_A'])
-        self.netG_B.load_state_dict(ckpt['G_B'])
+        self.netG_A.load_state_dict(self.__pop_ops_params_state_dict(ckpt['G_A']))
+        self.netG_B.load_state_dict(self.__pop_ops_params_state_dict(ckpt['G_B']))
         self.netD_A.load_state_dict(ckpt['D_A'])
         self.netD_B.load_state_dict(ckpt['D_B'])
 

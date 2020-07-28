@@ -138,12 +138,18 @@ if __name__ == '__main__':
     opt = options.parse()
     opt.isTrain = False
 
+    if opt.load_path is None or not os.path.exists(opt.load_path):
+        raise FileExistsError('Load path must be exist!!!')
+    device = torch.device(f'cuda:{opt.gpu_ids[0]}') if len(opt.gpu_ids) > 0 else 'cpu'
+    ckpt = torch.load(opt.load_path, map_location=device)
+    cfg = ckpt['cfg']
+
     # create model
     if opt.model == 'cyclegan':
         if opt.mask:
             model = MaskCycleGAN.MaskCycleGANModel(opt)
         else:
-            model = CycleGAN.CycleGANModel(opt)
+            model = CycleGAN.CycleGANModel(opt, cfg_AtoB=cfg[0], cfg_BtoA=cfg[1])
     elif opt.model == 'pix2pix':
         opt.norm = 'batch'
         opt.dataset_mode = 'aligned'
@@ -151,12 +157,12 @@ if __name__ == '__main__':
         if opt.mask:
             model = MaskPix2Pix.MaskPix2PixModel(opt)
         else:
-            model = Pix2Pix.Pix2PixModel(opt)
+            model = Pix2Pix.Pix2PixModel(opt, filter_cfgs=cfg[0], channel_cfgs=cfg[1])
     elif opt.model == 'mobilecyclegan':
         if opt.mask:
             model = MaskMobileCycleGAN.MaskMobileCycleGANModel(opt)
         else:
-            model = MobileCycleGAN.MobileCycleGANModel(opt)
+            model = MobileCycleGAN.MobileCycleGANModel(opt, cfg_AtoB=cfg[0], cfg_BtoA=cfg[1])
     elif opt.model == 'mobilepix2pix':
         opt.norm = 'batch'
         opt.dataset_mode = 'aligned'
@@ -164,13 +170,12 @@ if __name__ == '__main__':
         if opt.mask:
             model = MaskMobilePix2Pix.MaskMobilePix2PixModel(opt)
         else:
-            model = MobilePix2Pix.MobilePix2PixModel(opt)
+            model = MobilePix2Pix.MobilePix2PixModel(opt, cfg=cfg[0])
     else:
         raise NotImplementedError('%s not implemented' % opt.model)
 
-    if opt.load_path is None or not os.path.exists(opt.load_path):
-        raise FileExistsError('Load path must be exist!!!')
     model.load_models(opt.load_path)
+    print(model)
 
     if opt.model == 'cyclegan' or opt.model == 'mobilecyclegan':
         AtoB_fid, BtoA_fid = test_cyclegan_fid(model, copy.copy(opt))
