@@ -17,7 +17,7 @@ from collections import OrderedDict
 class MaskUnetSkipConnectionBlock(nn.Module):
 
     def __init__(self, outer_nc, inner_nc, input_nc=None, submodule=None,
-                 outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False, opt=None):
+                 outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False, opt=None, loss_type=None):
         super(MaskUnetSkipConnectionBlock, self).__init__()
         self.opt = opt
         self.outermost = outermost
@@ -32,10 +32,10 @@ class MaskUnetSkipConnectionBlock(nn.Module):
                              stride=2, padding=1, bias=use_bias)
         downrelu = nn.LeakyReLU(0.2, True)
         downnorm = norm_layer(inner_nc)
-        downmask = Mask(inner_nc, mask_loss_type=self.opt.mask_loss_type)
+        downmask = Mask(inner_nc, mask_loss_type=self.opt.mask_loss_type if loss_type is None else loss_type)
         uprelu = nn.ReLU(True)
         upnorm = norm_layer(outer_nc)
-        upmask = Mask(outer_nc, mask_loss_type=self.opt.mask_loss_type)
+        upmask = Mask(outer_nc, mask_loss_type=self.opt.mask_loss_type if loss_type is None else loss_type)
 
         if outermost:
             upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
@@ -87,7 +87,7 @@ class MaskUnetGenertor(nn.Module):
         unet_block = MaskUnetSkipConnectionBlock(ngf * 2, ngf * 4, input_nc=None, submodule=unet_block,
                                              norm_layer=norm_layer, opt=self.opt)
         unet_block = MaskUnetSkipConnectionBlock(ngf, ngf * 2, input_nc=None, submodule=unet_block,
-                                             norm_layer=norm_layer, opt=self.opt)
+                                             norm_layer=norm_layer, opt=self.opt, loss_type='bound' if opt.upconv_bound else None)
         self.model = MaskUnetSkipConnectionBlock(output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True,
                                              norm_layer=norm_layer, opt=self.opt)
 
@@ -205,7 +205,7 @@ class MaskPix2PixModel(nn.Module):
         # First, G(A) should fake the discriminator
         fake_AB = torch.cat((self.real_A, self.fake_B), 1)
         pred_fake = self.netD(fake_AB)
-        self.loss_G_GAN = self.criterionGAN(pred_fake, True)
+        self.loss_G_GAN = self.criterionGAN(pred_fake, True, for_discriminator=False)
         # Second, G(A) = B
         self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
         # mask weight decay
@@ -261,9 +261,6 @@ class MaskPix2PixModel(nn.Module):
         ckpt = torch.load(load_path, map_location=self.device)
         self.netG.load_state_dict(ckpt['G'])
         self.netD.load_state_dict(ckpt['D'])
-
-        if self.opt.isTrain:
-            self.update_masklayer(self.opt.epoch_count-1)
 
         print('loading the model from %s' % load_path)
         return ckpt['fid'], float('inf')
@@ -326,7 +323,10 @@ class MaskPix2PixModel(nn.Module):
         mask_weight_loss = 0.0
         for name, module in G.named_modules():
             if isinstance(module, Mask):
-                mask_weight_loss += module.get_weight_decay_loss()
+                if name == 'model.model.1.model.3.mask_weight' or name == 'model.model.1.model.8.mask_weight':
+                    mask_weight_loss += module.get_weight_decay_loss() * self.opt.upconv_coeff
+                else:
+                    mask_weight_loss += module.get_weight_decay_loss()
         return mask_weight_loss
 
     def stable_weight(self, model, bound):

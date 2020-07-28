@@ -372,8 +372,6 @@ class MaskMobileCycleGANModel(nn.Module):
 
         lr = self.optimizers[0].param_groups[0]['lr']
         print('learning rate = %.7f' % lr)
-        self.netG_A.update_sparsity_factor()
-        self.netG_B.update_sparsity_factor()
         # self.update_masklayer(epoch) # update mask alpha
 
     def set_requires_grad(self, nets, requires_grad=False):
@@ -449,6 +447,9 @@ class MaskMobileCycleGANModel(nn.Module):
         return errors_ret
 
     def update_masklayer(self, current_iter, all_total_iters):
+
+        self.netG_A.update_sparsity_factor()
+        self.netG_B.update_sparsity_factor()
 
         update_bound_iters_count = all_total_iters * 0.75
 

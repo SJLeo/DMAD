@@ -262,3 +262,4 @@ optional arguments:
   --scratch             Finetune from scratch
 ```
 
+python prune.py --dataroot ../datasets/summer2winter/ --model cyclegan --mask --checkpoints_dir ./experiments/summer2winter_cube_adaptive1_200relutripletbound0.0006/ --load_path ./experiments/summer2winter_cube_adaptive1_200relutripletbound0.0006/model_best.pth --finetune --lambda_attention_distill 10.0 --lambda_discriminator_distill 0.001 --pretrain_path ../pretrain/summer2winter_pretrain.pth --gpu_ids 0 --display_id 1 --name attention10.0

@@ -135,6 +135,52 @@ def test_pix2pix_mIoU(model, opt):
                     num_workers=opt.num_threads)
     return mIoU
 
+def test(model, opt, logger, epoch, best_AtoB_fid, best_BtoA_fid, best_AtoB_epoch, best_BtoA_epoch, all_total_iters=0):
+
+    if opt.model == 'cyclegan' or opt.model == 'mobilecyclegan':
+        AtoB_fid, BtoA_fid = test_cyclegan_fid(model, copy.copy(opt))
+        fid = (AtoB_fid, BtoA_fid)
+        logger.info('AtoB FID: %.2f' % AtoB_fid)
+        logger.info('BtoA FID: %.2f' % BtoA_fid)
+
+        if (opt.mask and epoch > all_total_iters * 0.75) or not opt.mask:
+            if AtoB_fid < best_AtoB_fid:
+                model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
+                                  fid=fid, isbest=True, direction='AtoB')
+                best_AtoB_fid = AtoB_fid
+                best_AtoB_epoch = epoch
+            if BtoA_fid < best_BtoA_fid:
+                model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
+                                  fid=fid, isbest=True, direction='BtoA')
+                best_BtoA_fid = BtoA_fid
+                best_BtoA_epoch = epoch
+
+    elif opt.model == 'pix2pix' or opt.model == 'mobilepix2pix':
+
+        if 'cityscapes' in opt.dataroot:
+            mIoU = test_pix2pix_mIoU(model, copy.copy(opt))
+            logger.info('mIoU: %.2f' % mIoU)
+            fid = mIoU
+
+            if mIoU > best_BtoA_fid and (
+                    not opt.mask or (opt.mask and epoch > all_total_iters * 0.75)):
+                model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
+                                  fid=fid, isbest=True, direction=opt.direction)
+                best_BtoA_fid = fid
+                best_BtoA_epoch = epoch
+        else:
+            fid = test_pix2pix_fid(model, copy.copy(opt))
+            logger.info('FID: %.2f' % fid)
+
+            if fid < best_AtoB_fid and (
+                    not opt.mask or (opt.mask and epoch > all_total_iters * 0.75)):
+                model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
+                                  fid=fid, isbest=True, direction='AtoB')
+                best_AtoB_fid = fid
+                best_AtoB_epoch = epoch
+
+    return best_AtoB_fid, best_BtoA_fid, best_AtoB_epoch, best_BtoA_epoch, fid
+
 if __name__ == '__main__':
 
     best_AtoB_fid = float('inf')
@@ -220,6 +266,11 @@ if __name__ == '__main__':
                 visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
 
             if total_iters % update_bound_freq == 0 and opt.mask:
+                best_AtoB_fid, best_BtoA_fid, best_AtoB_epoch, best_BtoA_epoch, fid =\
+                    test(model, opt, logger, total_iters, best_AtoB_fid, best_BtoA_fid, best_AtoB_epoch, best_BtoA_epoch, all_total_iters=all_total_iters)
+                logger.info('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
+                model.save_models(total_iters, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'), fid=fid)
+                model.print_sparsity_info(logger)
                 model.update_masklayer(current_iter=total_iters, all_total_iters=all_total_iters)
 
             if total_iters % opt.print_freq == 0:
@@ -232,56 +283,14 @@ if __name__ == '__main__':
 
                 iter_data_time = time.time()
 
-        if epoch % opt.save_epoch_freq == 0:
-
-            if opt.model == 'cyclegan' or opt.model == 'mobilecyclegan':
-                AtoB_fid, BtoA_fid = test_cyclegan_fid(model, copy.copy(opt))
-                fid = (AtoB_fid, BtoA_fid)
-                logger.info('AtoB FID: %.2f' % AtoB_fid)
-                logger.info('BtoA FID: %.2f' % BtoA_fid)
-
-                if (opt.mask and epoch > (opt.n_epochs + opt.n_epochs_decay) * 0.75) or not opt.mask:
-                    if AtoB_fid < best_AtoB_fid:
-                        model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
-                                          fid=fid, isbest=True, direction='AtoB')
-                        best_AtoB_fid = AtoB_fid
-                        best_AtoB_epoch = epoch
-                    if BtoA_fid < best_BtoA_fid:
-                        model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
-                                          fid=fid, isbest=True, direction='BtoA')
-                        best_BtoA_fid = BtoA_fid
-                        best_BtoA_epoch = epoch
-
-            elif opt.model == 'pix2pix' or opt.model == 'mobilepix2pix':
-
-                if 'cityscapes' in opt.dataroot:
-                    mIoU = test_pix2pix_mIoU(model, copy.copy(opt))
-                    logger.info('mIoU: %.2f' % mIoU)
-                    fid = mIoU
-
-                    if mIoU > best_BtoA_fid and (not opt.mask or (opt.mask and epoch > (opt.n_epochs + opt.n_epochs_decay) * 0.75)):
-                        model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
-                                          fid=fid, isbest=True, direction=opt.direction)
-                        best_BtoA_fid = fid
-                        best_BtoA_epoch = epoch
-                else:
-                    fid = test_pix2pix_fid(model, copy.copy(opt))
-                    logger.info('FID: %.2f' % fid)
-
-                    if fid < best_AtoB_fid and (not opt.mask or (opt.mask and epoch > (opt.n_epochs + opt.n_epochs_decay) * 0.75)):
-                        model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
-                                          fid=fid, isbest=True, direction='AtoB')
-                        best_AtoB_fid = fid
-                        best_AtoB_epoch = epoch
-
+        if not opt.mask:
+            best_AtoB_fid, best_BtoA_fid, best_AtoB_epoch, best_BtoA_epoch, fid = \
+                test(model, opt, logger, epoch, best_AtoB_fid, best_BtoA_fid, best_AtoB_epoch, best_BtoA_epoch)
             logger.info('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
             model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'), fid=fid)
 
         logger.info('End of epoch %d / %d \t Time Taken: %d sec' %  (
             epoch, opt.n_epochs + opt.n_epochs_decay, time.time() - epoch_start_time))
-
-        if opt.mask:
-            model.print_sparsity_info(logger)
 
         model.update_learning_rate(epoch)  # update learning rates at the end of every epoch.
 

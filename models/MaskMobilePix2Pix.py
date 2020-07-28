@@ -278,7 +278,7 @@ class MaskMobilePix2PixModel(nn.Module):
         # Fake; stop backprop to the generator by detaching fake_B
         fake_AB = torch.cat((self.real_A, self.fake_B), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
         pred_fake = self.netD(fake_AB.detach())
-        self.loss_D_fake = self.criterionGAN(pred_fake, False)
+        self.loss_D_fake = self.criterionGAN(pred_fake, False, for_discriminator=False)
         # Real
         real_AB = torch.cat((self.real_A, self.real_B), 1)
         pred_real = self.netD(real_AB)
@@ -321,7 +321,6 @@ class MaskMobilePix2PixModel(nn.Module):
 
         lr = self.optimizers[0].param_groups[0]['lr']
         print('learning rate = %.7f' % lr)
-        self.netG.update_sparsity_factor()
         # self.update_masklayer(epoch)
 
     def set_requires_grad(self, nets, requires_grad=False):
@@ -349,9 +348,6 @@ class MaskMobilePix2PixModel(nn.Module):
         ckpt = torch.load(load_path, map_location=self.device)
         self.netG.load_state_dict(ckpt['G'])
         self.netD.load_state_dict(ckpt['D'])
-
-        if self.opt.isTrain:
-            self.update_masklayer(self.opt.epoch_count-1)
 
         print('loading the model from %s' % load_path)
         return ckpt['fid'], float('inf')
@@ -388,6 +384,8 @@ class MaskMobilePix2PixModel(nn.Module):
         return errors_ret
 
     def update_masklayer(self, current_iter, all_total_iters):
+
+        self.netG.update_sparsity_factor()
 
         update_bound_iters_count = all_total_iters * 0.75
 
