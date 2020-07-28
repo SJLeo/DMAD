@@ -272,6 +272,7 @@ if __name__ == '__main__':
                 model.save_models(total_iters, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'), fid=fid)
                 model.print_sparsity_info(logger)
                 model.update_masklayer(current_iter=total_iters, all_total_iters=all_total_iters)
+                model.model_train()
 
             if total_iters % opt.print_freq == 0:
                 losses = model.get_current_losses()
