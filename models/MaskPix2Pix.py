@@ -323,7 +323,8 @@ class MaskPix2PixModel(nn.Module):
         mask_weight_loss = 0.0
         for name, module in G.named_modules():
             if isinstance(module, Mask):
-                if name == 'model.model.1.model.3.mask_weight' or name == 'model.model.1.model.8.mask_weight':
+                if (name == 'model.model.1.model.3.mask_weight' or name == 'model.model.1.model.8.mask_weight') \
+                        and self.opt.upconv_bound:
                     mask_weight_loss += module.get_weight_decay_loss() * self.opt.upconv_coeff
                 else:
                     mask_weight_loss += module.get_weight_decay_loss()
@@ -592,3 +593,4 @@ class MaskPix2PixModel(nn.Module):
 
         logger.info('Prune done!!!')
         return pruned_model
+# python train.py --dataroot ../datasets/edges2shoes/ --mask --model pix2pix --name edges2shoes_cube_solo1_100.0relubound0.00001 --mask_weight_decay 0.00001 --gpu_ids 0 --display_id 1 --n_epochs 5 --n_epochs_decay 15 --load_size 256 --no_flip --batch_size 4 --ngf 64 --ndf 128 --gan_mode hinge --upconv_coeff 100.0 --upconv_bound

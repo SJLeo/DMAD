@@ -231,7 +231,7 @@ if __name__ == '__main__':
     visualizer = Visualizer(opt)
     total_iters = 0
     all_total_iters = dataset_size * opt.batch_size * (opt.n_epochs + opt.n_epochs_decay)
-    update_bound_freq = all_total_iters * 0.75 // 150
+    update_bound_freq = all_total_iters * 0.75 // 150 // opt.batch_size
 
     if opt.continue_train:
         if opt.load_path is None or not os.path.exists(opt.load_path):
@@ -265,7 +265,7 @@ if __name__ == '__main__':
                 save_result = total_iters % opt.update_html_freq == 0
                 visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
 
-            if total_iters % update_bound_freq == 0 and opt.mask:
+            if (total_iters // opt.batch_size) % update_bound_freq == 0 and opt.mask:
                 best_AtoB_fid, best_BtoA_fid, best_AtoB_epoch, best_BtoA_epoch, fid =\
                     test(model, opt, logger, total_iters, best_AtoB_fid, best_BtoA_fid, best_AtoB_epoch, best_BtoA_epoch, all_total_iters=all_total_iters)
                 logger.info('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))

@@ -415,9 +415,9 @@ class MaskMobilePix2PixModel(nn.Module):
             if isinstance(module, Mask):
                 if self.opt.lambda_update_coeff > 0 and name in self.group_mask_weight_names:
                     mask_weight_loss += module.get_block_decay_loss(G.block_sparsity_coeff)
-                elif name == 'model.28':
+                elif name == 'model.28' and self.opt.upconv_bound:
                     mask_weight_loss += module.get_weight_decay_loss() * self.opt.upconv_coeff
-                elif (name == 'model.24' or name == 'model.3') and not self.opt.upconv_solo:
+                elif (name == 'model.24' or name == 'model.3') and not self.opt.upconv_solo and self.opt.upconv_bound:
                     mask_weight_loss += module.get_weight_decay_loss() * self.opt.upconv_coeff
                 else:
                     mask_weight_loss += module.get_weight_decay_loss()
