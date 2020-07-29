@@ -106,7 +106,7 @@ def test_pix2pix_mIoU(model, opt):
     util.mkdirs(result_dir)
 
     fake_B = {}
-    names = set()
+    names = []
     for i, data in enumerate(dataset):
         model.set_input(data)
 
@@ -118,7 +118,8 @@ def test_pix2pix_mIoU(model, opt):
         for path in range(len(model.image_paths)):
             short_path = ntpath.basename(model.image_paths[0][0])
             name = os.path.splitext(short_path)[0]
-            names.add(name)
+            if name not in names:
+                names.append(name)
         util.save_images(visuals, model.image_paths, result_dir, direction=opt.direction,
                          aspect_ratio=opt.aspect_ratio)
 
@@ -175,7 +176,6 @@ if __name__ == '__main__':
         raise NotImplementedError('%s not implemented' % opt.model)
 
     model.load_models(opt.load_path)
-    print(model)
 
     if opt.model == 'cyclegan' or opt.model == 'mobilecyclegan':
         AtoB_fid, BtoA_fid = test_cyclegan_fid(model, copy.copy(opt))

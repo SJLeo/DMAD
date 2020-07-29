@@ -140,7 +140,7 @@ def print_options(opt, parser):
         opt.name += 'solo' + str(opt.block_coeff) + '_' + str(opt.upconv_coeff)
         opt.name += opt.mask_loss_type + str(opt.mask_weight_decay) + '_'
 
-        opt.name += 'distill' + str(opt.lambda_distill)
+        opt.name += 'distill' + str(opt.lambda_attention_distill)
 
         if opt.unmask_last_upconv:
             opt.name += '_unmask'

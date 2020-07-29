@@ -347,10 +347,11 @@ class MaskPix2PixModel(nn.Module):
             mask_model_key = 'model.model.1.'
             for j in range(i):
                 mask_model_key += 'model.4.'
-            mask_model_bn_keys.append(mask_model_key + 'model.2.')
             if i != 6:
+                mask_model_bn_keys.append(mask_model_key + 'model.2.')
                 mask_weight_keys.append(mask_model_key + 'model.3.mask_weight')
             else:
+                mask_model_bn_keys.append(mask_model_key + 'model.1.')
                 mask_weight_keys.append(mask_model_key + 'model.2.mask_weight')
 
         mask_model_bn_keys.append('model.model.1.model.4.model.4.model.4.model.4.model.4.model.4.model.5.')
@@ -372,7 +373,8 @@ class MaskPix2PixModel(nn.Module):
                 if stable_weight_mask[j]:
                     scale = (mask_weight[j] * stepfunc_params[3] + stepfunc_params[4]) * mask_weight[j] + stepfunc_params[5]
                     state_dict[mask_model_bn_keys[i] + 'weight'][j] *= scale
-                    state_dict[mask_model_bn_keys[i] + 'bias'][j] *= scale
+                    if mask_model_bn_keys[i] + 'bias' in state_dict.keys():
+                        state_dict[mask_model_bn_keys[i] + 'bias'][j] *= scale
 
         model.load_state_dict(state_dict)
 

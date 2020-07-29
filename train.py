@@ -108,7 +108,7 @@ def test_pix2pix_mIoU(model, opt):
     util.mkdirs(result_dir)
 
     fake_B = {}
-    names = set()
+    names = []
     for i, data in enumerate(dataset):
         model.set_input(data)
 
@@ -120,7 +120,8 @@ def test_pix2pix_mIoU(model, opt):
         for path in range(len(model.image_paths)):
             short_path = ntpath.basename(model.image_paths[0][0])
             name = os.path.splitext(short_path)[0]
-            names.add(name)
+            if name not in names:
+                names.append(name)
         util.save_images(visuals, model.image_paths, result_dir, direction=opt.direction,
                          aspect_ratio=opt.aspect_ratio)
 
@@ -220,6 +221,7 @@ if __name__ == '__main__':
             model = MaskMobilePix2Pix.MaskMobilePix2PixModel(opt)
         else:
             model = MobilePix2Pix.MobilePix2PixModel(opt)
+            print(model)
     else:
         raise NotImplementedError('%s not implemented' % opt.model)
 
@@ -284,7 +286,7 @@ if __name__ == '__main__':
 
                 iter_data_time = time.time()
 
-        if not opt.mask:
+        if not opt.mask and epoch % opt.save_epoch_freq == 0:
             best_AtoB_fid, best_BtoA_fid, best_AtoB_epoch, best_BtoA_epoch, fid = \
                 test(model, opt, logger, epoch, best_AtoB_fid, best_BtoA_fid, best_AtoB_epoch, best_BtoA_epoch)
             logger.info('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
