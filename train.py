@@ -221,7 +221,6 @@ if __name__ == '__main__':
             model = MaskMobilePix2Pix.MaskMobilePix2PixModel(opt)
         else:
             model = MobilePix2Pix.MobilePix2PixModel(opt)
-            print(model)
     else:
         raise NotImplementedError('%s not implemented' % opt.model)
 
