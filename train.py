@@ -255,6 +255,8 @@ if __name__ == '__main__':
             iter_start_time = time.time()
             if total_iters % opt.print_freq == 0:
                 t_data = iter_start_time - iter_data_time
+            else:
+                t_data = 0
 
             total_iters += opt.batch_size
             epoch_iter += opt.batch_size
