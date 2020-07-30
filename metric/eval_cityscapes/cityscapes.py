@@ -35,7 +35,7 @@ class cityscapes:
         return [(item.split('/')[0], item.split('/')[1]) for item in dataset]
 
     def load_image(self, split, city, idx):
-        im = Image.open('{}/leftImg8bit_sequence/{}/{}/{}_leftImg8bit.png'.format(self.dir, split, city, idx))
+        im = Image.open('{}/leftImg8bit/{}/{}/{}_leftImg8bit.png'.format(self.dir, split, city, idx))
         return im
 
     def assign_trainIds(self, label):
@@ -135,7 +135,7 @@ class cityscapes:
         frame = int(frame)
         frame_seq = []
         for i in range(frame - SEQ_LEN, frame + 1):
-            frame_path = '{0}/leftImg8bit_sequence/val/{1}/{1}_{2}_{3:0>6d}_leftImg8bit.png'.format(
+            frame_path = '{0}/leftImg8bit/val/{1}/{1}_{2}_{3:0>6d}_leftImg8bit.png'.format(
                 self.dir, city, shot, i)
             frame_seq.append(Image.open(frame_path))
         return frame_seq

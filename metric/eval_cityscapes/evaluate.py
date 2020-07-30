@@ -11,12 +11,18 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--cityscapes_dir", type=str, required=True, help="Path to the original cityscapes dataset")
 parser.add_argument("--result_dir", type=str, required=True, help="Path to the generated images to be evaluated")
 parser.add_argument("--output_dir", type=str, required=True, help="Where to save the evaluation results")
-parser.add_argument("--caffemodel_dir", type=str, default='./scripts/eval_cityscapes/caffemodel/', help="Where the FCN-8s caffemodel stored")
+parser.add_argument("--caffemodel_dir", type=str, default='./caffemodel/', help="Where the FCN-8s caffemodel stored")
 parser.add_argument("--gpu_id", type=int, default=0, help="Which gpu id to use")
 parser.add_argument("--split", type=str, default='val', help="Data split to be evaluated")
 parser.add_argument("--save_output_images", type=int, default=0, help="Whether to save the FCN output images")
 args = parser.parse_args()
 
+# python evaluate.py \
+#        --cityscapes_dir ~/datasets/cityscapes/ \
+#        --result_dir /media/disk1/lishaojie/DMAD/experiments/cityscapes_pretrain_hinge/test_results/fake_B \
+#        --output_dir ./output_dir \
+#        --gpu_id 1 \
+#        --caffemodel_dir ./caffemodel/
 
 def main():
     if not os.path.isdir(args.output_dir):
@@ -30,9 +36,20 @@ def main():
     label_frames = CS.list_label_frames(args.split)
     caffe.set_device(args.gpu_id)
     caffe.set_mode_gpu()
-    net = caffe.Net(args.caffemodel_dir + '/deploy.prototxt',
+    net = caffe.Net(args.caffemodel_dir + 'deploy.prototxt',
                     args.caffemodel_dir + 'fcn-8s-cityscapes.caffemodel',
                     caffe.TEST)
+
+    table_path = os.path.join(args.cityscapes_dir, 'table.txt')
+    map_source_list = {}
+    table = []
+    with open(table_path, 'r') as f:
+        lines = f.readlines()
+        for line in lines:
+            table.append(line.strip().split(' '))
+    for item in table:
+        if item[2].endswith('.png'):
+            map_source_list[str(item[2].split('/')[-1])] = str(item[0])
 
     hist_perframe = np.zeros((n_cl, n_cl))
     for i, idx in enumerate(label_frames):
@@ -41,7 +58,8 @@ def main():
         city = idx.split('_')[0]
         # idx is city_shot_frame
         label = CS.load_label(args.split, city, idx)
-        im_file = args.result_dir + '/' + idx + '_leftImg8bit.png'
+        im_file = args.result_dir + '/' + map_source_list[idx + '_leftImg8bit.png'] + '_fake_B.png'
+
         im = np.array(Image.open(im_file))
         im = scipy.misc.imresize(im, (label.shape[1], label.shape[2]))
         out = segrun(net, CS.preprocess(im))
