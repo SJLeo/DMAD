@@ -198,6 +198,7 @@ if __name__ == '__main__':
     elif opt.model == 'pix2pix' or opt.model == 'mobilepix2pix':
         if 'cityscape' in opt.dataroot:
             mIOU = test_pix2pix_mIoU(pruned_model, copy.copy(opt))
+            fid = mIOU
             logger.info('mIOU: %.2f' % mIOU)
         else:
             fid = test_pix2pix_fid(pruned_model, copy.copy(opt))
@@ -285,7 +286,7 @@ if __name__ == '__main__':
 
                 elif opt.model == 'pix2pix' or opt.model == 'mobilepix2pix':
                     if 'cityscapes' in opt.dataroot:
-                        mIOU = test_pix2pix_mIoU(model, copy.copy(opt))
+                        mIOU = test_pix2pix_mIoU(pruned_model, copy.copy(opt))
                         logger.info('mIOU: %.2f' % mIOU)
                         fid = mIOU
                         if mIOU > best_BtoA_fid:

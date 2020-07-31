@@ -407,7 +407,9 @@ class MaskMobilePix2PixModel(nn.Module):
         self.early_stop_mask()
         if not self.stop_mask:
             self.stable_weight(self.netG, bound=bound)
-        self.netG.update_masklayer(bound if not self.stop_mask else None)
+        else:
+            print('Early stop!!!')
+        self.netG.update_masklayer(bound if not self.stop_mask else 0.0)
 
     def print_sparsity_info(self, logger):
         logger.info('netG')
@@ -649,9 +651,9 @@ class MaskMobilePix2PixModel(nn.Module):
 
                         for j in range(len(last_mask)):
                             if last_mask[j]:
-                                state_dict[pruned_model_key + 'conv.0.weight'][new_filter_index, :, :, :] = \
+                                state_dict[pruned_model_key + 'conv.0.weight'][new_channel_index, :, :, :] = \
                                     mask_state_dict[mask_model_key + 'conv.0.weight'][j, :, :, :]
-                                state_dict[pruned_model_key + 'conv.0.bias'][new_filter_index] = \
+                                state_dict[pruned_model_key + 'conv.0.bias'][new_channel_index] = \
                                     mask_state_dict[mask_model_key + 'conv.0.bias'][j]
                                 new_filter_index = 0
                                 for k in range(len(current_mask)):
@@ -672,15 +674,14 @@ class MaskMobilePix2PixModel(nn.Module):
                                 new_channel_index = 0
                                 for k in range(len(last_mask)):
                                     if last_mask[k]:
-                                        state_dict[pruned_model_key + 'weight'][new_filter_index, new_channel_index, :,
-                                        :] = \
-                                            mask_state_dict[mask_model_key + 'weight'][j, k, :, :] * 1.0 if zero_mask[
-                                                j] else 0.0
+                                        state_dict[pruned_model_key + 'weight'][new_filter_index, new_channel_index, :,:] = \
+                                            mask_state_dict[mask_model_key + 'weight'][j, k, :, :] * 1.0 if zero_mask[j] else 0.0
                                         new_channel_index += 1
                                 state_dict[pruned_model_key + 'bias'][new_filter_index] = \
                                     mask_state_dict[mask_model_key + 'bias'][j] * 1.0 if zero_mask[j] else 0.0
                                 new_filter_index += 1
-                        separable = True
+                        if i % 2 == 0:
+                            separable = True
 
                 last_mask = current_mask
 
