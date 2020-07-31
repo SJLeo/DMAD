@@ -115,6 +115,10 @@ parser.add_argument('--drn_path', type=str, default='/home/lishaojie/pretrain/dr
 parser.add_argument('--finetune', action='store_true', help='Finetune after prune')
 parser.add_argument('--scratch', action='store_true', help='Finetune from scratch')
 
+# early stop
+parser.add_argument('--AtoB_macs_threshold', type=float, default=0, help='early stop macs threshold used in netG_A')
+parser.add_argument('--BtoA_macs_threshold', type=float, default=0, help='early stop macs threshold used in netG_B')
+
 def print_options(opt, parser):
     """Print and save options
 

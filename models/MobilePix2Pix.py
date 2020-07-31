@@ -89,12 +89,14 @@ class MobileResnetGenerator(nn.Module):
                  nn.Conv2d(input_nc, ngf if cfg is None else cfg[cfg_index], kernel_size=7, padding=0, bias=use_bias),
                  norm_layer(ngf),
                  nn.ReLU(True)]
+        cfg_index += 1
 
         n_downsampling = 2
         for i in range(n_downsampling):  # add downsampling layers
             mult = 2 ** i
             input_channel_num = ngf * mult if cfg is None else cfg[cfg_index - 1]
             output_channel_num = ngf * mult * 2 if cfg is None else cfg[cfg_index]
+            cfg_index += 1
             model += [nn.Conv2d(input_channel_num, output_channel_num, kernel_size=3, stride=2, padding=1, bias=use_bias),
                       norm_layer(output_channel_num),
                       nn.ReLU(True)]

@@ -13,6 +13,7 @@ import os
 import ntpath
 import copy
 import numpy as np
+from thop import profile
 
 def test_cyclegan_fid(model, opt):
     opt.phase = 'test'
@@ -134,6 +135,15 @@ def test_pix2pix_mIoU(model, opt):
                     num_workers=opt.num_threads)
     return mIoU
 
+def get_flops_parms(model, opt, name, verbose=False):
+
+    device = torch.device(f'cuda:{opt.gpu_ids[0]}') if len(opt.gpu_ids) > 0 else 'cpu'
+    input = torch.randn(1, 3, opt.crop_size, opt.crop_size).to(device)
+
+    macs, params = profile(model, inputs=(input,), verbose=verbose)
+
+    print("%s | Params: %.2fM | MACs: %.2fG" % (name, params / (1000 ** 2), macs / (1000 ** 3)))
+
 if __name__ == '__main__':
 
     opt = options.parse()
@@ -143,7 +153,7 @@ if __name__ == '__main__':
         raise FileExistsError('Load path must be exist!!!')
     device = torch.device(f'cuda:{opt.gpu_ids[0]}') if len(opt.gpu_ids) > 0 else 'cpu'
     ckpt = torch.load(opt.load_path, map_location=device)
-    cfg = ckpt['cfg']
+    cfg = ckpt['cfg'] if 'cfg' in ckpt.keys() else None
 
     # create model
     if opt.model == 'cyclegan':

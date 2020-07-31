@@ -269,10 +269,12 @@ if __name__ == '__main__':
                 visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
 
             if (total_iters // opt.batch_size) % update_bound_freq == 0 and opt.mask:
-                best_AtoB_fid, best_BtoA_fid, best_AtoB_epoch, best_BtoA_epoch, fid =\
-                    test(model, opt, logger, total_iters, best_AtoB_fid, best_BtoA_fid, best_AtoB_epoch, best_BtoA_epoch, all_total_iters=all_total_iters)
-                logger.info('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
-                model.save_models(total_iters, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'), fid=fid)
+                if epoch % opt.save_epoch_freq == 0:
+                    best_AtoB_fid, best_BtoA_fid, best_AtoB_epoch, best_BtoA_epoch, fid = \
+                        test(model, opt, logger, total_iters, best_AtoB_fid, best_BtoA_fid, best_AtoB_epoch,
+                             best_BtoA_epoch, all_total_iters=all_total_iters)
+                    logger.info('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
+                    model.save_models(total_iters, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'), fid=fid)
                 model.print_sparsity_info(logger)
                 model.update_masklayer(current_iter=total_iters, all_total_iters=all_total_iters)
                 model.model_train()

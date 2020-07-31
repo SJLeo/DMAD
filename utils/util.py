@@ -298,22 +298,24 @@ def combine_best_model(best_AtoB_epoch, best_BtoA_epoch, source_path, target_pat
     if type == 'cyclegan' or type == 'mobilecyclegan':
         best_AtoB_model = torch.load(os.path.join(source_path, 'model_%d.pth' % best_AtoB_epoch), map_location='cpu')
         best_BtoA_model = torch.load(os.path.join(source_path, 'model_%d.pth' % best_BtoA_epoch), map_location='cpu')
-
+        best_AtoB_cfg = best_AtoB_model['cfg'][0] if 'cfg' in best_AtoB_model.keys() else None
+        best_BtoA_cfg = best_BtoA_model['cfg'][1] if 'cfg' in best_BtoA_model.keys() else None
         best_ckpt = {
             'G_A': best_AtoB_model['G_A'],
             'G_B': best_BtoA_model['G_B'],
             'D_A': best_AtoB_model['D_A'],
             'D_B': best_BtoA_model['D_B'],
-            'cfg': (best_AtoB_model['cfg'][0], best_BtoA_model['cfg'][1]),
+            'cfg': (best_AtoB_cfg, best_BtoA_cfg),
             'fid': (best_AtoB_model['fid'][0], best_BtoA_model['fid'][1])
         }
         torch.save(best_ckpt, os.path.join(target_path, 'model_best.pth'))
     elif type == 'pix2pix' or type == 'mobilepix2pix':
         best_AtoB_model = torch.load(os.path.join(source_path, 'model_%d.pth' % best_AtoB_epoch), map_location='cpu')
+        best_AtoB_cfg = best_AtoB_model['cfg'][0] if 'cfg' in best_AtoB_model.keys() else None
         best_ckpt = {
             'G': best_AtoB_model['G'],
             'D': best_AtoB_model['D'],
-            'cfg': best_AtoB_model['cfg'],
+            'cfg': best_AtoB_cfg,
             'fid': best_AtoB_model['fid']
         }
         torch.save(best_ckpt, os.path.join(target_path, 'model_best.pth'))

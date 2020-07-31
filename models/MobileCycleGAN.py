@@ -91,12 +91,14 @@ class MobileResnetGenerator(nn.Module):
                  nn.Conv2d(input_nc, ngf if cfg is None else cfg[cfg_index], kernel_size=7, padding=0, bias=use_bias),
                  norm_layer(ngf),
                  nn.ReLU(True)]
+        cfg_index += 1
 
         n_downsampling = 2
         for i in range(n_downsampling):  # add downsampling layers
             mult = 2 ** i
             input_channel_num = ngf * mult if cfg is None else cfg[cfg_index - 1]
             output_channel_num = ngf * mult * 2 if cfg is None else cfg[cfg_index]
+            cfg_index += 1
             model += [nn.Conv2d(input_channel_num, output_channel_num, kernel_size=3, stride=2, padding=1, bias=use_bias),
                       norm_layer(output_channel_num),
                       nn.ReLU(True)]
@@ -537,3 +539,24 @@ class MobileCycleGANModel(nn.Module):
             total_distill_loss += torch.norm(self.total_feature_out_DA_teacher_discriminator[i] - self.total_feature_out_DA_student_discriminator[i], 2)
             total_distill_loss += torch.norm(self.total_feature_out_DB_teacher_discriminator[i] - self.total_feature_out_DB_student_discriminator[i], 2)
         return total_distill_loss
+
+
+# class opts():
+#     mask_loss_type = 'relu'
+#     upconv_solo = True,
+#     upconv_bound = True,
+#     upconv_relu = False,
+#     gpu_ids = []
+# cfg = None
+# # cfg = [64, 128, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 128, 64]
+# moblie_model = MobileResnetGenerator(input_nc=3, output_nc=3, ngf=64, opt=opts(), cfg=cfg)
+# print(moblie_model)
+#
+# for k, v in moblie_model.state_dict().items():
+#     print(k, v.size())
+#
+# input = torch.randn((1, 3, 256, 256))
+# print(moblie_model(input).size())
+# from thop import profile
+# macs, params = profile(moblie_model, (input, ))
+# print(macs, params)
