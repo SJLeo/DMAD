@@ -7,6 +7,7 @@ import os
 import copy
 import math
 from collections import OrderedDict
+from thop import profile
 
 from utils.image_pool import ImagePool
 from models.GANLoss import GANLoss
@@ -256,6 +257,9 @@ class MaskCycleGANModel(nn.Module):
         for i in range(13, 22, 1):
             self.group_mask_weight_names.append('model.%d.conv_block.8' % i)
 
+        self.stop_AtoB_mask = False
+        self.stop_BtoA_mask = False
+
         # define loss functions
         self.criterionGAN= GANLoss(opt.gan_mode).to(self.device)
         self.criterionCycle = nn.L1Loss()
@@ -457,11 +461,15 @@ class MaskCycleGANModel(nn.Module):
                 bound = 0.0
         print('Bound: %.3f' % bound)
 
-        self.stable_weight(self.netG_A, bound=bound)
-        self.stable_weight(self.netG_B, bound=bound)
+        self.early_stop_mask()
 
-        self.netG_A.update_masklayer(bound)
-        self.netG_B.update_masklayer(bound)
+        if not self.stop_AtoB_mask:
+            self.stable_weight(self.netG_A, bound=bound)
+        if not self.stop_BtoA_mask:
+            self.stable_weight(self.netG_B, bound=bound)
+
+        self.netG_A.update_masklayer(bound if not self.stop_AtoB_mask else 0.0)
+        self.netG_B.update_masklayer(bound if not self.stop_BtoA_mask else 0.0)
 
     def print_sparsity_info(self, logger):
         logger.info('netG_A')
@@ -539,36 +547,86 @@ class MaskCycleGANModel(nn.Module):
 
         model.load_state_dict(state_dict)
 
+    def binary(self, model, boundary):
+
+        for name, module in model.named_modules():
+
+            if isinstance(module, Mask):
+
+                one_index = module.mask_weight > boundary
+                zero_idnex = module.mask_weight <= boundary
+
+                module.mask_weight.data[one_index] = 1.0
+                module.mask_weight.data[zero_idnex] = -1.0
+
+    def get_cfg_residual_mask(self, state_dict, bound=0.0):
+
+        prune_residual_keys = ['model.11.mask_weight'] + ['model.%d.conv_block.8.mask_weight' % i for i in
+                                                          range(13, 22, 1)]
+
+        residual_width = state_dict[prune_residual_keys[0]].size(0)
+        residual_mask = [0] * residual_width
+        for residual_key in prune_residual_keys:
+
+            current_mask = state_dict[residual_key] > bound
+
+            for i in range(len(current_mask)):
+                if current_mask[i]:
+                    residual_mask[i] += 1
+        residual_mask = torch.FloatTensor(residual_mask) > int(self.opt.threshold)
+
+        residual_cfg = sum(residual_mask)
+        total_cfgs = []
+        for k, v in state_dict.items():
+
+            if str.endswith(k, '.mask_weight'):
+                if k in prune_residual_keys:
+                    total_cfgs.append(int(residual_cfg))
+                else:
+                    total_cfgs.append(int(sum(v > bound)))
+
+        return total_cfgs, residual_mask
+
+    def early_stop_mask(self):
+
+        AtoB_bound = 1.0
+        BtoA_bound = 1.0
+        for module in self.netG_A.modules():
+            if isinstance(module, Mask):
+                AtoB_bound = module.bound.data
+                break
+        for module in self.netG_B.modules():
+            if isinstance(module, Mask):
+                BtoA_bound = module.bound.data
+                break
+
+        AtoB_cfgs, AtoB_residual_mask = self.get_cfg_residual_mask(self.netG_A.state_dict(), bound=-AtoB_bound)
+        BtoA_cfgs, BtoA_residual_mask = self.get_cfg_residual_mask(self.netG_B.state_dict(), bound=-BtoA_bound)
+
+        new_opt = copy.copy(self.opt)
+        new_opt.mask = False
+        pruned_model = CycleGANModel(new_opt, cfg_AtoB=AtoB_cfgs, cfg_BtoA=BtoA_cfgs)
+
+        input = torch.randn((1, self.opt.input_nc, self.opt.crop_size, self.opt.crop_size)).to(self.device)
+        AtoB_macs, AtoB_params = profile(pruned_model.netG_A, inputs=(input, ), verbose=False)
+        BtoA_macs, BtoA_params = profile(pruned_model.netG_B, inputs=(input, ), verbose=False)
+
+        AtoB_macs = AtoB_macs / (1000 ** 3) # convert bit to GB
+        # AtoB_params = AtoB_params / (1000 ** 2) # convert bit to MB
+        BtoA_macs = BtoA_macs / (1000 ** 3)  # convert bit to GB
+        # BtoA_params = BtoA_params / (1000 ** 2)  # convert bit to MB
+
+        if AtoB_macs <= self.opt.AtoB_macs_threshold and not self.stop_AtoB_mask:
+            self.stable_weight(self.netG_A, bound=-AtoB_bound)
+            self.binary(self.netG_A, boundary=-AtoB_bound)
+            self.stop_AtoB_mask = True
+
+        if BtoA_macs <= self.opt.BtoA_macs_threshold and not self.stop_BtoA_mask:
+            self.stable_weight(self.netG_B, bound=-BtoA_bound)
+            self.binary(self.netG_B, boundary=-BtoA_bound)
+            self.stop_BtoA_mask = True
+
     def prune(self, opt, logger):
-
-        def get_cfg_residual_mask(state_dict, bound=0.0):
-
-            prune_residual_keys = ['model.11.mask_weight'] + ['model.%d.conv_block.8.mask_weight' % i for i in
-                                                              range(13, 22, 1)]
-
-            residual_width = state_dict[prune_residual_keys[0]].size(0)
-            residual_mask = [0] * residual_width
-            for residual_key in prune_residual_keys:
-
-                current_mask = state_dict[residual_key] > bound
-
-                for i in range(len(current_mask)):
-                    if current_mask[i]:
-                        residual_mask[i] += 1
-            residual_mask = torch.FloatTensor(residual_mask) > int(self.opt.threshold)
-
-            residual_cfg = sum(residual_mask)
-            total_cfgs = []
-            for k, v in state_dict.items():
-
-                if str.endswith(k, '.mask_weight'):
-                    if k in prune_residual_keys:
-                        total_cfgs.append(int(residual_cfg))
-                    else:
-                        total_cfgs.append(int(sum(v > bound)))
-
-            return total_cfgs, residual_mask
-
 
         def inhert_weight(model, mask_model, residual_mask, bound=0.0, n_blocks=9, unmask_last_upconv=False):
 
@@ -691,8 +749,8 @@ class MaskCycleGANModel(nn.Module):
         AtoB_fid, BtoA_fid = self.load_models(opt.load_path)
         logger.info('After Training. AtoB FID: %.2f\tBtoA FID: %.2f' % (AtoB_fid, BtoA_fid))
 
-        AtoB_cfgs, AtoB_residual_mask = get_cfg_residual_mask(self.netG_A.state_dict())
-        BtoA_cfgs, BtoA_residual_mask = get_cfg_residual_mask(self.netG_B.state_dict())
+        AtoB_cfgs, AtoB_residual_mask = self.get_cfg_residual_mask(self.netG_A.state_dict())
+        BtoA_cfgs, BtoA_residual_mask = self.get_cfg_residual_mask(self.netG_B.state_dict())
 
         logger.info(AtoB_cfgs)
         logger.info(BtoA_cfgs)

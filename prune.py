@@ -296,7 +296,7 @@ if __name__ == '__main__':
                             best_AtoB_fid = mIOU
                             best_AtoB_epoch = epoch
                     else:
-                        fid = test_pix2pix_fid(model, copy.copy(opt))
+                        fid = test_pix2pix_fid(pruned_model, copy.copy(opt))
                         logger.info('FID: %.2f' % fid)
                         if fid < best_AtoB_fid:
                             model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),

@@ -26,6 +26,7 @@ class Mask(nn.Module):
 
         relu_mask = (self.mask_weight > -self.bound) & (self.mask_weight < self.bound)
         return torch.sum(relu_mask.float() * (self.mask_weight + self.bound) * block_sparsity_coeff)
+
     def get_weight_decay_loss(self):
 
         if self.bound == 0.0:

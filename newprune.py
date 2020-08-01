@@ -285,16 +285,16 @@ if __name__ == '__main__':
 
                 elif opt.model == 'pix2pix' or opt.model == 'mobilepix2pix':
                     if 'cityscapes' in opt.dataroot:
-                        mIOU = test_pix2pix_mIoU(model, copy.copy(opt))
+                        mIOU = test_pix2pix_mIoU(pruned_model, copy.copy(opt))
                         logger.info('mIOU: %.2f' % mIOU)
                         fid = mIOU
-                        if mIOU > best_BtoA_fid:
+                        if mIOU > best_AtoB_fid:
                             model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
                                               fid=fid, isbest=True, direction=opt.direction)
-                            best_BtoA_fid = fid
-                            best_BtoA_epoch = epoch
+                            best_AtoB_fid = fid
+                            best_AtoB_epoch = epoch
                     else:
-                        fid = test_pix2pix_fid(model, copy.copy(opt))
+                        fid = test_pix2pix_fid(pruned_model, copy.copy(opt))
                         logger.info('FID: %.2f' % fid)
                         if fid < best_AtoB_fid:
                             model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),

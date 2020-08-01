@@ -567,12 +567,6 @@ class MaskMobileCycleGANModel(nn.Module):
                 module.mask_weight.data[one_index] = 1.0
                 module.mask_weight.data[zero_idnex] = -1.0
 
-        for name, module in model.named_modules():
-
-            if isinstance(module, Mask):
-
-                print(module.mask_weight)
-
     def get_cfg_residual_mask(self, state_dict, bound=0.0):
 
         prune_residual_keys = ['model.11.mask_weight'] + ['model.%d.conv_block.9.mask_weight' % i for i in
