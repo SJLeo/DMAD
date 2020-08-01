@@ -100,6 +100,7 @@ parser.add_argument('--attention_normal', type=bool, default=True, help='normali
 parser.add_argument('--threshold', type=int, default=0, help='The threshold of the removing block. default:0')
 parser.add_argument('--upconv_bound', action='store_true', help='bound loss for upconv\'s mask weight')
 parser.add_argument('--upconv_relu', action='store_true', help='contray relu loss for upconv\'s mask weight')
+parser.add_argument('--bound_loss_index', type=str, default='000000000000000', help='use bound loss for conv/upconv, 1 stand for using. default:000000000000000')
 parser.add_argument('--lambda_update_coeff', type=float, default=0.0, help='weight for update block\'s sparsity coeff after every epoch training')
 
 #test parameter
@@ -169,4 +170,12 @@ def parse():
         id = int(str_id)
         if id >= 0:
             opt.gpu_ids.append(id)
+
+    bound_loss_index_list = list(opt.bound_loss_index)
+    opt.bound_loss_index = []
+    for index in bound_loss_index_list:
+        if index == '1':
+            opt.bound_loss_index.append(True)
+        else:
+            opt.bound_loss_index.append(False)
     return opt
