@@ -224,10 +224,10 @@ class MobilePix2PixModel(nn.Module):
         if self.opt.lambda_attention_distill > 0 or self.opt.lambda_discriminator_distill > 0:
 
             teacher_fake_B = self.teacher_model.netG(self.real_A)  # G(A)
-            self.teacher_model.netD(self.fake_B)
+            self.teacher_model.netD(torch.cat((self.real_A, self.fake_B), 1))
 
             if self.opt.lambda_discriminator_distill > 0:
-                self.teacher_model_discriminator.netD(teacher_fake_B)
+                self.teacher_model_discriminator.netD(torch.cat((self.real_A, teacher_fake_B), 1))
 
     def backward_D(self):
         """Calculate GAN loss for the discriminator"""
@@ -390,11 +390,11 @@ class MobilePix2PixModel(nn.Module):
     def distill_attention_loss(self):
 
         total_attention_teacher = [f.pow(2).mean(1, keepdim=True) for f in
-                                        self.total_feature_out_AtoB_teacher.values()]
+                                        self.total_feature_out_teacher.values()]
         total_attention_D_teacher = [f.pow(2).mean(1, keepdim=True) for f in
-                                      self.total_feature_out_DA_teacher.values()]
+                                      self.total_feature_out_D_teacher.values()]
         total_attention_student = [f.pow(2).mean(1, keepdim=True) for f in
-                                        self.total_feature_out_AtoB_student.values()]
+                                        self.total_feature_out_student.values()]
 
         # interpolate attention map from 31*31 to 64*64
         total_attention_D_teacher[1] = util.attention_interpolate(total_attention_D_teacher[1])

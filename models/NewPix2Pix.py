@@ -197,10 +197,10 @@ class Pix2PixModel(nn.Module):
         if self.opt.lambda_attention_distill > 0 or self.opt.lambda_discriminator_distill > 0:
 
             teacher_fake_B = self.teacher_model.netG(self.real_A)  # G(A)
-            self.teacher_model.netD(self.fake_B)
+            self.teacher_model.netD(torch.cat((self.real_A, self.fake_B), 1))
 
             if self.opt.lambda_discriminator_distill > 0:
-                self.teacher_model_discriminator.netD(teacher_fake_B)
+                self.teacher_model_discriminator.netD(torch.cat((self.real_A, teacher_fake_B), 1))
 
     def backward_D(self):
         """Calculate GAN loss for the discriminator"""

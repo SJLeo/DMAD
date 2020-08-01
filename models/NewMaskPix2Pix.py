@@ -432,7 +432,7 @@ class MaskPix2PixModel(nn.Module):
                 AtoB_bound = module.bound.data
                 break
 
-        filter_cfgs, channel_cfgs = self.get_cfg_residual_mask(self.netG.state_dict(), bound=-AtoB_bound)
+        filter_cfgs, channel_cfgs = self.get_cfg(self.netG.state_dict(), bound=-AtoB_bound)
 
         new_opt = copy.copy(self.opt)
         new_opt.mask = False
