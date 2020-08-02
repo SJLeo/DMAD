@@ -119,9 +119,9 @@ class MaskUnetGenertor(nn.Module):
 
             if isinstance(module, Mask):
 
-                current_sparsity_state = float(sum(module.mask_weight > -module.bound))
+                current_sparsity_state = float(sum(module.mask_weight < -module.bound))
                 max_sparsity_rate = max(max_sparsity_rate, current_sparsity_state)
-                layer_sparsity_states.append(current_sparsity_state if current_sparsity_state != 0.0 else 0.01)
+                layer_sparsity_states.append(current_sparsity_state if current_sparsity_state > 0.01 else 0.01)
 
         if max_sparsity_rate > 0.01 and self.opt.lambda_update_coeff > 0:
             for i in range(len(layer_sparsity_states)):
@@ -131,6 +131,7 @@ class MaskUnetGenertor(nn.Module):
                     self.layer_sparsity_coeff[i] = 0
                 else:
                     self.layer_sparsity_coeff[i] = self.opt.lambda_update_coeff * (max_sparsity_rate / current_sparsity_rate)
+        print(self.layer_sparsity_coeff)
 
     def print_sparse_info(self, logger):
 
