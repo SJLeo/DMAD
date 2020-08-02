@@ -110,7 +110,7 @@ class MaskMobileResnetGenerator(nn.Module):
             mult = 2 ** i
             model += [nn.Conv2d(ngf * mult, ngf * mult * 2, kernel_size=3, stride=2, padding=1, bias=use_bias),
                       norm_layer(ngf * mult * 2),
-                      Mask(ngf * mult * 2, mask_loss_type=self.opt.mask_loss_type),
+                      Mask(ngf * mult * 2, mask_loss_type=self.opt.mask_loss_type if i != 0 else 'bound'),
                       nn.ReLU(True)]
 
         mult = 2 ** n_downsampling
@@ -174,7 +174,7 @@ class MaskMobileResnetGenerator(nn.Module):
         for i in range(13, 22, 1):
             group_mask_weight_names.append('model.%d.conv_block.9' % i)
 
-        residual_mask = [True for _ in range(256)]
+        residual_mask = [True for _ in range(self.opt.ngf * 4)]
 
         for name, module in self.named_modules():
             if isinstance(module, Mask):
@@ -246,11 +246,11 @@ class MaskMobileCycleGANModel(nn.Module):
         visual_names_B = ['real_B', 'fake_A', 'rec_B', 'idt_A']
         self.visual_names = visual_names_A + visual_names_B
 
-        self.netG_A = MaskMobileResnetGenerator(opt=self.opt)
-        self.netG_B = MaskMobileResnetGenerator(opt=self.opt)
+        self.netG_A = MaskMobileResnetGenerator(opt=self.opt, ngf=self.opt.ngf)
+        self.netG_B = MaskMobileResnetGenerator(opt=self.opt, ngf=self.opt.ngf)
 
-        self.netD_A = NLayerDiscriminator()
-        self.netD_B = NLayerDiscriminator()
+        self.netD_A = NLayerDiscriminator(ndf=self.opt.ndf)
+        self.netD_B = NLayerDiscriminator(ndf=self.opt.ndf)
         self.init_net()
 
         self.fake_A_pool = ImagePool(50)
@@ -495,7 +495,7 @@ class MaskMobileCycleGANModel(nn.Module):
                     mask_weight_loss += module.get_block_decay_loss(G.block_sparsity_coeff)
                 elif name == 'model.28' and self.opt.upconv_bound:
                     mask_weight_loss += module.get_weight_decay_loss() * self.opt.upconv_coeff
-                elif  (name == 'model.24' or name == 'model.3') and not self.opt.upconv_solo and self.opt.upconv_bound:
+                elif  (name == 'model.24' or name == 'model.3' or name == 'model.7') and not self.opt.upconv_solo and self.opt.upconv_bound:
                     mask_weight_loss += module.get_weight_decay_loss() * self.opt.upconv_coeff
                 else:
                     mask_weight_loss += module.get_weight_decay_loss()

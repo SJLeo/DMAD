@@ -76,6 +76,7 @@ class MaskUnetGenertor(nn.Module):
     def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, opt=None):
         super(MaskUnetGenertor, self).__init__()
         self.opt = opt
+        device = torch.device(f'cuda:{opt.gpu_ids[0]}') if len(opt.gpu_ids) > 0 else 'cpu'
         bound_loss_index = self.opt.bound_loss_index
         unet_block = MaskUnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=None,
                                                  norm_layer=norm_layer, innermost=True, opt=self.opt,
@@ -103,17 +104,39 @@ class MaskUnetGenertor(nn.Module):
                                                  outermost=True,
                                                  norm_layer=norm_layer, opt=self.opt,
                                                  down_loss_type='bound' if bound_loss_index[0] else None)
+        self.layer_sparsity_coeff = torch.FloatTensor([1.0] * 15).to(device)
 
     def update_masklayer(self, bound):
         for module in self.modules():
             if isinstance(module, Mask):
                 module.update(bound)
 
+    def update_sparsity_factor(self):
+
+        layer_sparsity_states = []
+        max_sparsity_rate = 0.0
+        for module in self.modules():
+
+            if isinstance(module, Mask):
+
+                current_sparsity_state = float(sum(module.mask_weight > -module.bound))
+                max_sparsity_rate = max(max_sparsity_rate, current_sparsity_state)
+                layer_sparsity_states.append(current_sparsity_state if current_sparsity_state != 0.0 else 0.01)
+
+        if max_sparsity_rate > 0.01 and self.opt.lambda_update_coeff > 0:
+            for i in range(len(layer_sparsity_states)):
+
+                current_sparsity_rate = layer_sparsity_states[i]
+                if current_sparsity_rate > 0.85:
+                    self.layer_sparsity_coeff[i] = 0
+                else:
+                    self.layer_sparsity_coeff[i] = self.opt.lambda_update_coeff * (max_sparsity_rate / current_sparsity_rate)
+
     def print_sparse_info(self, logger):
 
         for name, module in self.named_modules():
             if isinstance(module, Mask):
-
+                # print(module.get_weight_decay_loss().data.cpu(), module.get_weight_decay_loss().data.cpu()/module.mask_weight.size(0))
                 mask = module.get_current_mask()
 
                 logger.info('%s sparsity ratio: %.2f\tone ratio: %.2f\t'
@@ -313,6 +336,8 @@ class MaskPix2PixModel(nn.Module):
 
     def update_masklayer(self, current_iter, all_total_iters):
 
+        self.netG.update_sparsity_factor()
+
         update_bound_iters_count = all_total_iters * 0.75
 
         if current_iter > update_bound_iters_count:
@@ -345,9 +370,9 @@ class MaskPix2PixModel(nn.Module):
         for name, module in G.named_modules():
             if isinstance(module, Mask):
                 if bound_loss_index[loss_index]:
-                    mask_weight_loss += module.get_weight_decay_loss() * self.opt.upconv_coeff
+                    mask_weight_loss += module.get_weight_decay_loss() * self.opt.upconv_coeff * G.layer_sparsity_coeff[loss_index]
                 else:
-                    mask_weight_loss += module.get_weight_decay_loss()
+                    mask_weight_loss += module.get_weight_decay_loss() * G.layer_sparsity_coeff[loss_index]
                 loss_index += 1
                 # if (name == 'model.model.2.model.3.mask_weight' or name == 'model.model.2.model.8.mask_weight') \
                 #         and self.opt.upconv_bound:
@@ -355,6 +380,10 @@ class MaskPix2PixModel(nn.Module):
                 # else:
                 #     mask_weight_loss += module.get_weight_decay_loss()
         return mask_weight_loss
+
+    def layer_blance(self):
+
+        pass
 
     def stable_weight(self, model, bound):
 
@@ -670,7 +699,7 @@ class MaskPix2PixModel(nn.Module):
         new_opt.mask = False
         pruned_model = Pix2PixModel(new_opt, filter_cfgs=filter_cfgs, channel_cfgs=channel_cfgs)
 
-        inhert_weight(pruned_model.netG, self.netG, ngf=self.opt.ngf, bound=0.0)
+        # inhert_weight(pruned_model.netG, self.netG, ngf=self.opt.ngf, bound=0.0)
 
         logger.info('Prune done!!!')
         return pruned_model
