@@ -473,8 +473,12 @@ class MaskMobileCycleGANModel(nn.Module):
 
         if not self.stop_AtoB_mask:
             self.stable_weight(self.netG_A, bound=bound)
+        else:
+            print('AtoB early stop')
         if not self.stop_BtoA_mask:
             self.stable_weight(self.netG_B, bound=bound)
+        else:
+            print('BtoA early stop')
 
         self.netG_A.update_masklayer(bound if not self.stop_AtoB_mask else 0.0)
         self.netG_B.update_masklayer(bound if not self.stop_BtoA_mask else 0.0)

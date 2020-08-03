@@ -111,7 +111,7 @@ class MaskUnetGenertor(nn.Module):
             if isinstance(module, Mask):
                 module.update(bound)
 
-    def update_sparsity_factor(self):
+    def update_sparsity_factor(self, frozen_threshold=0.85):
 
         layer_sparsity_states = []
         max_sparsity_rate = 0.0
@@ -119,18 +119,25 @@ class MaskUnetGenertor(nn.Module):
 
             if isinstance(module, Mask):
 
-                current_sparsity_state = float(sum(module.mask_weight < -module.bound))
+                current_sparsity_state = float(sum(module.mask_weight < -module.bound)) / module.mask_weight.size(0)
+                if current_sparsity_state > frozen_threshold:
+                    one_index = module.mask_weight >= -module.bound
+                    zero_idnex = module.mask_weight < -module.bound
+                    module.mask_weight.data[one_index] = 1.0
+                    module.mask_weight.data[zero_idnex] = -1.0
                 max_sparsity_rate = max(max_sparsity_rate, current_sparsity_state)
                 layer_sparsity_states.append(current_sparsity_state if current_sparsity_state > 0.01 else 0.01)
 
         if max_sparsity_rate > 0.01 and self.opt.lambda_update_coeff > 0:
+
             for i in range(len(layer_sparsity_states)):
 
                 current_sparsity_rate = layer_sparsity_states[i]
-                if current_sparsity_rate > 0.85:
+                if current_sparsity_rate > frozen_threshold:
                     self.layer_sparsity_coeff[i] = 0
                 else:
                     self.layer_sparsity_coeff[i] = self.opt.lambda_update_coeff * (max_sparsity_rate / current_sparsity_rate)
+
         print(self.layer_sparsity_coeff)
 
     def print_sparse_info(self, logger):
@@ -337,7 +344,7 @@ class MaskPix2PixModel(nn.Module):
 
     def update_masklayer(self, current_iter, all_total_iters):
 
-        self.netG.update_sparsity_factor()
+        self.netG.update_sparsity_factor(frozen_threshold=self.opt.frozen_threshold)
 
         update_bound_iters_count = all_total_iters * 0.75
 
@@ -381,10 +388,6 @@ class MaskPix2PixModel(nn.Module):
                 # else:
                 #     mask_weight_loss += module.get_weight_decay_loss()
         return mask_weight_loss
-
-    def layer_blance(self):
-
-        pass
 
     def stable_weight(self, model, bound):
 
