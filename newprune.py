@@ -197,8 +197,8 @@ if __name__ == '__main__':
         logger.info('BtoA FID: %.2f' % BtoA_fid)
     elif opt.model == 'pix2pix' or opt.model == 'mobilepix2pix':
         if 'cityscape' in opt.dataroot:
-            mIOU = test_pix2pix_mIoU(pruned_model, copy.copy(opt))
-            logger.info('mIOU: %.2f' % mIOU)
+            fid = test_pix2pix_mIoU(pruned_model, copy.copy(opt))
+            logger.info('mIOU: %.2f' % fid)
         else:
             fid = test_pix2pix_fid(pruned_model, copy.copy(opt))
             logger.info('FID: %.2f' % fid)
