@@ -703,7 +703,7 @@ class MaskPix2PixModel(nn.Module):
         new_opt.mask = False
         pruned_model = Pix2PixModel(new_opt, filter_cfgs=filter_cfgs, channel_cfgs=channel_cfgs)
 
-        # inhert_weight(pruned_model.netG, self.netG, ngf=self.opt.ngf, bound=0.0)
+        inhert_weight(pruned_model.netG, self.netG, ngf=self.opt.ngf, bound=0.0)
 
         logger.info('Prune done!!!')
         return pruned_model
