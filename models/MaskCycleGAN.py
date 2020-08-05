@@ -491,7 +491,7 @@ class MaskCycleGANModel(nn.Module):
                     mask_weight_loss += module.get_block_decay_loss(G.block_sparsity_coeff)
                 elif name == 'model.28' and self.opt.upconv_bound:
                     mask_weight_loss += module.get_weight_decay_loss() * self.opt.upconv_coeff
-                elif  (name == 'model.24' or name == 'model.3') and not self.opt.upconv_solo and self.opt.upconv_bound:
+                elif  (name == 'model.24' or name == 'model.3' or name == 'model.7') and not self.opt.upconv_solo and self.opt.upconv_bound:
                     mask_weight_loss += module.get_weight_decay_loss() * self.opt.upconv_coeff
                 else:
                     mask_weight_loss += module.get_weight_decay_loss()
@@ -722,7 +722,7 @@ class MaskCycleGANModel(nn.Module):
                                     state_dict[pruned_model_key+'weight'][new_channel_index, new_filter_index, :, :] = \
                                         mask_state_dict[mask_model_key+'weight'][k, j, :, :]
                                     new_channel_index += 1
-                            state_dict[pruned_model_key+'bias'][new_filter_index] = mask_state_dict[mask_model_key+'bias'][j]
+                            state_dict[pruned_model_key+'bias'][new_filter_indgetex] = mask_state_dict[mask_model_key+'bias'][j]
                             new_filter_index += 1
 
                 else:
