@@ -173,7 +173,7 @@ class MaskMobileResnetGenerator(nn.Module):
         for i in range(13, 22, 1):
             group_mask_weight_names.append('model.%d.conv_block.9' % i)
 
-        residual_mask = [True for _ in range(256)]
+        residual_mask = [True for _ in range(self.opt.ngf * 4)]
 
         for name, module in self.named_modules():
             if isinstance(module, Mask):

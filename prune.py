@@ -211,8 +211,8 @@ if __name__ == '__main__':
         opt.isTrain = True
         best_AtoB_epoch = 1
         best_BtoA_epoch = 1
-        best_AtoB_fid = float('inf')
-        best_BtoA_fid = float('inf')
+        best_AtoB_fid = float('inf') if 'cityscapes' not in opt.dataroot else 0.0
+        best_BtoA_fid = float('inf') if 'cityscapes' not in opt.dataroot else 0.0
         # logger = util.get_logger(os.path.join(opt.checkpoints_dir, opt.name, 'logger.log'))
         logger.info('Start Finetune....')
 

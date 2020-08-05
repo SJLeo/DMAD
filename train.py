@@ -144,33 +144,42 @@ def test(model, opt, logger, epoch, best_AtoB_fid, best_BtoA_fid, best_AtoB_epoc
         logger.info('AtoB FID: %.2f' % AtoB_fid)
         logger.info('BtoA FID: %.2f' % BtoA_fid)
 
-        if (opt.mask and epoch > all_total_iters * 0.75) or not opt.mask:
-            if AtoB_fid < best_AtoB_fid:
-                model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
-                                  fid=fid, isbest=True, direction='AtoB')
-                best_AtoB_fid = AtoB_fid
-                best_AtoB_epoch = epoch
-            if BtoA_fid < best_BtoA_fid:
-                model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
-                                  fid=fid, isbest=True, direction='BtoA')
-                best_BtoA_fid = BtoA_fid
-                best_BtoA_epoch = epoch
+        if AtoB_fid <= best_AtoB_fid and (
+            not opt.mask or (opt.mask and (epoch > all_total_iters * 0.75 or model.stop_AtoB_mask))):
+            model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
+                              fid=fid, isbest=True, direction='AtoB')
+            best_AtoB_fid = AtoB_fid
+            best_AtoB_epoch = epoch
+        if BtoA_fid <= best_BtoA_fid and (
+                not opt.mask or (opt.mask and (epoch > all_total_iters * 0.75 or model.stop_AtoB_mask))):
+            model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
+                              fid=fid, isbest=True, direction='BtoA')
+            best_BtoA_fid = BtoA_fid
+            best_BtoA_epoch = epoch
 
     elif opt.model == 'pix2pix' or opt.model == 'mobilepix2pix':
 
         if 'cityscapes' in opt.dataroot:
             fid = test_pix2pix_mIoU(model, copy.copy(opt))
             logger.info('mIoU: %.2f' % fid)
+
+            if fid >= best_AtoB_fid and (
+                    not opt.mask or (opt.mask and (epoch > all_total_iters * 0.75 or model.stop_AtoB_mask))):
+                best_AtoB_fid = fid
+                best_AtoB_epoch = epoch
+                model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
+                                  fid=fid, isbest=True, direction=opt.direction)
         else:
             fid = test_pix2pix_fid(model, copy.copy(opt))
             logger.info('FID: %.2f' % fid)
 
-        if fid < best_AtoB_fid and (
-                not opt.mask or (opt.mask and epoch > all_total_iters * 0.75)):
-            model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
-                              fid=fid, isbest=True, direction=opt.direction)
-            best_AtoB_fid = fid
-            best_AtoB_epoch = epoch
+            if fid <= best_AtoB_fid and (
+                    not opt.mask or (opt.mask and (epoch > all_total_iters * 0.75 or model.stop_AtoB_mask))):
+                best_AtoB_fid = fid
+                best_AtoB_epoch = epoch
+
+                model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
+                          fid=fid, isbest=True, direction=opt.direction)
 
     else:
         fid = 0
@@ -179,15 +188,15 @@ def test(model, opt, logger, epoch, best_AtoB_fid, best_BtoA_fid, best_AtoB_epoc
 
 if __name__ == '__main__':
 
-    best_AtoB_fid = float('inf')
-    best_BtoA_fid = float('inf')
-    best_AtoB_epoch = 0
-    best_BtoA_epoch = 0
-
     opt = options.parse()
     opt.isTrain = True
     util.mkdirs(os.path.join(opt.checkpoints_dir, opt.name))
     logger = util.get_logger(os.path.join(opt.checkpoints_dir, opt.name, 'logger.log'))
+
+    best_AtoB_fid = float('inf') if 'cityscapes' not in opt.dataroot else 0.0
+    best_BtoA_fid = float('inf') if 'cityscapes' not in opt.dataroot else 0.0
+    best_AtoB_epoch = 0
+    best_BtoA_epoch = 0
 
     # create model
     if opt.model == 'cyclegan':
