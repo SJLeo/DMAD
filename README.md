@@ -6,7 +6,7 @@ python train.py
 --model cyclegan 
 --gpu_ids 3 
 --display_id 30 
---name horse2zebracube_adaptive1_100relutripletbound0.0008 
+--name horse2zebra_adaptive1_100relutripletbound0.0008 
 --n_epochs 100 
 --n_epochs_decay 100 
 
@@ -38,6 +38,7 @@ python train.py
 
 --mask  
 --mask_weight_decay 1e-3 
+--lambda_update_coeff 1.0
 
 python train.py  
 --dataroot ../datasets/cityscapes/ 
@@ -49,13 +50,14 @@ python train.py
 --n_epochs_decay 150 
 --load_size 256 
 --no_flip 
---ngf 96 
+--ngf 64 
 --ndf 128 
 --gan_mode vanilla/hinge
 --direction BtoA 
 
 --mask  
 --mask_weight_decay 1e-3 
+--lambda_update_coeff 1.0
 ```
 
 #### Test
@@ -84,7 +86,8 @@ python prune.py
 --display_id 1
 
 --finetune
---lambda_distill 100.0
+--lambda_attention_distill 100.0 
+--lambda_discriminator_distill 0.001
 --pretrain_path ../pretrain/horse2zebra_pretrain.pth
 ```
 

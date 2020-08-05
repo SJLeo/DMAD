@@ -69,38 +69,38 @@ class UnetGenertor(nn.Module):
         super(UnetGenertor, self).__init__()
 
         unet_block = UnetSkipConnectionBlock(conv_inchannel=ngf * 8 if channel_cfgs is None else channel_cfgs[6],
-                                             conv_outchannel=ngf * 8 if filter_cfgs is None else filter_cfgs[6],
+                                             conv_outchannel=ngf * 8 if filter_cfgs is None else filter_cfgs[7],
                                              upconv_inchannel=ngf * 8 if channel_cfgs is None else channel_cfgs[7],
-                                             upconv_outchannel=ngf * 8 if filter_cfgs is None else filter_cfgs[7],
+                                             upconv_outchannel=ngf * 8 if filter_cfgs is None else filter_cfgs[8],
                                              submodule=None, norm_layer=norm_layer, innermost=True)
 
         for i in range(num_downs - 5):
             unet_block = UnetSkipConnectionBlock(conv_inchannel=ngf * 8 if channel_cfgs is None else channel_cfgs[5-i],
-                                             conv_outchannel=ngf * 8 if filter_cfgs is None else filter_cfgs[5-i],
+                                             conv_outchannel=ngf * 8 if filter_cfgs is None else filter_cfgs[6-i],
                                              upconv_inchannel=ngf * 16 if channel_cfgs is None else channel_cfgs[8+i],
-                                             upconv_outchannel=ngf * 8 if filter_cfgs is None else filter_cfgs[8+i],
+                                             upconv_outchannel=ngf * 8 if filter_cfgs is None else filter_cfgs[9+i],
                                              submodule=unet_block, norm_layer=norm_layer, use_dropout=use_dropout)
 
         unet_block = UnetSkipConnectionBlock(conv_inchannel=ngf * 4 if channel_cfgs is None else channel_cfgs[2],
-                                             conv_outchannel=ngf * 8 if filter_cfgs is None else filter_cfgs[2],
+                                             conv_outchannel=ngf * 8 if filter_cfgs is None else filter_cfgs[3],
                                              upconv_inchannel=ngf * 16 if channel_cfgs is None else channel_cfgs[11],
-                                             upconv_outchannel=ngf * 4 if filter_cfgs is None else filter_cfgs[11],
+                                             upconv_outchannel=ngf * 4 if filter_cfgs is None else filter_cfgs[12],
                                              submodule=unet_block, norm_layer=norm_layer)
 
         unet_block = UnetSkipConnectionBlock(conv_inchannel=ngf * 2 if channel_cfgs is None else channel_cfgs[1],
-                                             conv_outchannel=ngf * 4 if filter_cfgs is None else filter_cfgs[1],
+                                             conv_outchannel=ngf * 4 if filter_cfgs is None else filter_cfgs[2],
                                              upconv_inchannel=ngf * 8 if channel_cfgs is None else channel_cfgs[12],
-                                             upconv_outchannel=ngf * 2 if filter_cfgs is None else filter_cfgs[12],
+                                             upconv_outchannel=ngf * 2 if filter_cfgs is None else filter_cfgs[13],
                                              submodule=unet_block, norm_layer=norm_layer)
 
         unet_block = UnetSkipConnectionBlock(conv_inchannel=ngf if channel_cfgs is None else channel_cfgs[0],
-                                             conv_outchannel=ngf * 2 if filter_cfgs is None else filter_cfgs[0],
+                                             conv_outchannel=ngf * 2 if filter_cfgs is None else filter_cfgs[1],
                                              upconv_inchannel=ngf * 4 if channel_cfgs is None else channel_cfgs[13],
-                                             upconv_outchannel=ngf if filter_cfgs is None else filter_cfgs[13],
+                                             upconv_outchannel=ngf if filter_cfgs is None else filter_cfgs[14],
                                              submodule=unet_block, norm_layer=norm_layer)
 
         self.model = UnetSkipConnectionBlock(conv_inchannel=input_nc,
-                                conv_outchannel=ngf,
+                                conv_outchannel=ngf if filter_cfgs is None else filter_cfgs[0],
                                 upconv_inchannel=ngf * 2 if channel_cfgs is None else channel_cfgs[14],
                                 upconv_outchannel=output_nc,
                                 submodule=unet_block, norm_layer=norm_layer, outermost=True)
@@ -197,10 +197,10 @@ class Pix2PixModel(nn.Module):
         if self.opt.lambda_attention_distill > 0 or self.opt.lambda_discriminator_distill > 0:
 
             teacher_fake_B = self.teacher_model.netG(self.real_A)  # G(A)
-            self.teacher_model.netD(self.fake_B)
+            self.teacher_model.netD(torch.cat((self.real_A, self.fake_B), 1))
 
             if self.opt.lambda_discriminator_distill > 0:
-                self.teacher_model_discriminator.netD(teacher_fake_B)
+                self.teacher_model_discriminator.netD(torch.cat((self.real_A, teacher_fake_B), 1))
 
     def backward_D(self):
         """Calculate GAN loss for the discriminator"""
@@ -329,6 +329,7 @@ class Pix2PixModel(nn.Module):
         if self.opt.pretrain_path is None or not os.path.exists(self.opt.pretrain_path):
             raise FileExistsError('The pretrain model path must be exist!!!')
         new_opt = copy.copy(self.opt)
+        new_opt.ngf = 64
         new_opt.lambda_attention_distill = 0.0
         new_opt.lambda_discriminator_distill = 0.0
         self.teacher_model = Pix2PixModel(new_opt)
@@ -406,6 +407,7 @@ class Pix2PixModel(nn.Module):
         if self.opt.pretrain_path is None or not os.path.exists(self.opt.pretrain_path):
             raise FileExistsError('The pretrain model path must be exist!!!')
         new_opt = copy.copy(self.opt)
+        new_opt.ngf = 64
         new_opt.lambda_attention_distill = 0.0
         new_opt.lambda_discriminator_distill = 0.0
         if self.teacher_model is None:

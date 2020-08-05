@@ -12,6 +12,7 @@ import utils.util as util
 import functools
 import os
 from collections import OrderedDict
+from thop import profile
 
 class MaskUnetSkipConnectionBlock(nn.Module):
 
@@ -40,7 +41,7 @@ class MaskUnetSkipConnectionBlock(nn.Module):
             upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
                                         kernel_size=4, stride=2,
                                         padding=1)
-            down = [downconv]
+            down = [downconv, downmask]
             up = [uprelu, upconv, nn.Tanh()]
             model = down + [submodule] + up
         elif innermost:
@@ -75,42 +76,75 @@ class MaskUnetGenertor(nn.Module):
     def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False, opt=None):
         super(MaskUnetGenertor, self).__init__()
         self.opt = opt
+        device = torch.device(f'cuda:{opt.gpu_ids[0]}') if len(opt.gpu_ids) > 0 else 'cpu'
         bound_loss_index = self.opt.bound_loss_index
         unet_block = MaskUnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=None,
-                                             norm_layer=norm_layer, innermost=True, opt=self.opt,
-                                             down_loss_type='bound' if bound_loss_index[7] else None,
-                                             up_loss_type='bound' if bound_loss_index[8] else None)
+                                                 norm_layer=norm_layer, innermost=True, opt=self.opt,
+                                                 down_loss_type='bound' if bound_loss_index[7] else None,
+                                                 up_loss_type='bound' if bound_loss_index[8] else None)
         for i in range(num_downs - 5):
             unet_block = MaskUnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=unet_block,
-                                                 norm_layer=norm_layer, use_dropout=use_dropout, opt=self.opt,
-                                                 down_loss_type='bound' if bound_loss_index[4+i] else None,
-                                                 up_loss_type='bound' if bound_loss_index[11-i] else None)
+                                                     norm_layer=norm_layer, use_dropout=use_dropout, opt=self.opt,
+                                                     down_loss_type='bound' if bound_loss_index[4 + i] else None,
+                                                     up_loss_type='bound' if bound_loss_index[11 - i] else None)
 
         unet_block = MaskUnetSkipConnectionBlock(ngf * 4, ngf * 8, input_nc=None, submodule=unet_block,
-                                             norm_layer=norm_layer, opt=self.opt,
-                                             down_loss_type='bound' if bound_loss_index[3] else None,
-                                             up_loss_type='bound' if bound_loss_index[12] else None)
+                                                 norm_layer=norm_layer, opt=self.opt,
+                                                 down_loss_type='bound' if bound_loss_index[3] else None,
+                                                 up_loss_type='bound' if bound_loss_index[12] else None)
         unet_block = MaskUnetSkipConnectionBlock(ngf * 2, ngf * 4, input_nc=None, submodule=unet_block,
-                                             norm_layer=norm_layer, opt=self.opt,
-                                             down_loss_type='bound' if bound_loss_index[2] else None,
-                                             up_loss_type='bound' if bound_loss_index[13] else None)
+                                                 norm_layer=norm_layer, opt=self.opt,
+                                                 down_loss_type='bound' if bound_loss_index[2] else None,
+                                                 up_loss_type='bound' if bound_loss_index[13] else None)
         unet_block = MaskUnetSkipConnectionBlock(ngf, ngf * 2, input_nc=None, submodule=unet_block,
-                                             norm_layer=norm_layer, opt=self.opt,
-                                             down_loss_type='bound' if bound_loss_index[1] else None,
-                                             up_loss_type='bound' if bound_loss_index[14] else None)
-        self.model = MaskUnetSkipConnectionBlock(output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True,
-                                             norm_layer=norm_layer, opt=self.opt, down_loss_type='bound' if bound_loss_index[0] else None)
+                                                 norm_layer=norm_layer, opt=self.opt,
+                                                 down_loss_type='bound' if bound_loss_index[1] else None,
+                                                 up_loss_type='bound' if bound_loss_index[14] else None)
+        self.model = MaskUnetSkipConnectionBlock(output_nc, ngf, input_nc=input_nc, submodule=unet_block,
+                                                 outermost=True,
+                                                 norm_layer=norm_layer, opt=self.opt,
+                                                 down_loss_type='bound' if bound_loss_index[0] else None)
+        self.layer_sparsity_coeff = torch.FloatTensor([1.0] * 15).to(device)
 
     def update_masklayer(self, bound):
         for module in self.modules():
             if isinstance(module, Mask):
                 module.update(bound)
 
+    def update_sparsity_factor(self, frozen_threshold=0.85):
+
+        layer_sparsity_states = []
+        max_sparsity_rate = 0.0
+        for module in self.modules():
+
+            if isinstance(module, Mask):
+
+                current_sparsity_state = float(sum(module.mask_weight < -module.bound)) / module.mask_weight.size(0)
+                if current_sparsity_state > frozen_threshold:
+                    one_index = module.mask_weight >= -module.bound
+                    zero_idnex = module.mask_weight < -module.bound
+                    module.mask_weight.data[one_index] = 1.0
+                    module.mask_weight.data[zero_idnex] = -1.0
+                max_sparsity_rate = max(max_sparsity_rate, current_sparsity_state)
+                layer_sparsity_states.append(current_sparsity_state if current_sparsity_state > 0.01 else 0.01)
+
+        if max_sparsity_rate > 0.01 and self.opt.lambda_update_coeff > 0:
+
+            for i in range(len(layer_sparsity_states)):
+
+                current_sparsity_rate = layer_sparsity_states[i]
+                if current_sparsity_rate > frozen_threshold:
+                    self.layer_sparsity_coeff[i] = 0
+                else:
+                    self.layer_sparsity_coeff[i] = self.opt.lambda_update_coeff * (max_sparsity_rate / current_sparsity_rate)
+
+        print(self.layer_sparsity_coeff)
+
     def print_sparse_info(self, logger):
 
         for name, module in self.named_modules():
             if isinstance(module, Mask):
-
+                # print(module.get_weight_decay_loss().data.cpu(), module.get_weight_decay_loss().data.cpu()/module.mask_weight.size(0))
                 mask = module.get_current_mask()
 
                 logger.info('%s sparsity ratio: %.2f\tone ratio: %.2f\t'
@@ -174,6 +208,8 @@ class MaskPix2PixModel(nn.Module):
         self.netG = MaskUnetGenertor(input_nc=3, output_nc=3, num_downs=8, ngf=opt.ngf, use_dropout=not opt.no_dropout, opt=self.opt)
         self.netD = NLayerDiscriminator(input_nc=3+3, ndf=128)
         self.init_net()
+
+        self.stop_mask = False
 
         self.criterionGAN = GANLoss(self.opt.gan_mode).to(self.device)
         self.criterionL1 = nn.L1Loss()
@@ -308,6 +344,8 @@ class MaskPix2PixModel(nn.Module):
 
     def update_masklayer(self, current_iter, all_total_iters):
 
+        self.netG.update_sparsity_factor(frozen_threshold=self.opt.frozen_threshold)
+
         update_bound_iters_count = all_total_iters * 0.75
 
         if current_iter > update_bound_iters_count:
@@ -322,8 +360,12 @@ class MaskPix2PixModel(nn.Module):
                 bound = 0.0
         print('Bound: %.3f' % bound)
 
-        self.stable_weight(self.netG, bound=bound)
-        self.netG.update_masklayer(bound)
+        self.early_stop_mask()
+        if not self.stop_mask:
+            self.stable_weight(self.netG, bound=bound)
+        else:
+            print('Early stop!!!')
+        self.netG.update_masklayer(bound if not self.stop_mask else 0.0)
 
     def print_sparsity_info(self, logger):
         logger.info('netG')
@@ -331,13 +373,20 @@ class MaskPix2PixModel(nn.Module):
 
     def get_mask_weight_loss(self, G):
         mask_weight_loss = 0.0
+        bound_loss_index = self.opt.bound_loss_index
+        loss_index = 0
         for name, module in G.named_modules():
             if isinstance(module, Mask):
-                if (name == 'model.model.1.model.3.mask_weight' or name == 'model.model.1.model.8.mask_weight') \
-                        and self.opt.upconv_bound:
-                    mask_weight_loss += module.get_weight_decay_loss() * self.opt.upconv_coeff
+                if bound_loss_index[loss_index]:
+                    mask_weight_loss += module.get_weight_decay_loss() * self.opt.upconv_coeff * G.layer_sparsity_coeff[loss_index]
                 else:
-                    mask_weight_loss += module.get_weight_decay_loss()
+                    mask_weight_loss += module.get_weight_decay_loss() * G.layer_sparsity_coeff[loss_index]
+                loss_index += 1
+                # if (name == 'model.model.2.model.3.mask_weight' or name == 'model.model.2.model.8.mask_weight') \
+                #         and self.opt.upconv_bound:
+                #     mask_weight_loss += module.get_weight_decay_loss() * self.opt.upconv_coeff
+                # else:
+                #     mask_weight_loss += module.get_weight_decay_loss()
         return mask_weight_loss
 
     def stable_weight(self, model, bound):
@@ -351,171 +400,228 @@ class MaskPix2PixModel(nn.Module):
                 break
         state_dict = model.state_dict()
 
-        mask_model_bn_keys = []
-        mask_weight_keys = []
-        for i in range(7):
-            mask_model_key = 'model.model.1.'
-            for j in range(i):
-                mask_model_key += 'model.4.'
-            if i != 6:
-                mask_model_bn_keys.append(mask_model_key + 'model.2.')
-                mask_weight_keys.append(mask_model_key + 'model.3.mask_weight')
-            else:
-                mask_model_bn_keys.append(mask_model_key + 'model.1.')
-                mask_weight_keys.append(mask_model_key + 'model.2.mask_weight')
-
-        mask_model_bn_keys.append('model.model.1.model.4.model.4.model.4.model.4.model.4.model.4.model.5.')
-        mask_weight_keys.append('model.model.1.model.4.model.4.model.4.model.4.model.4.model.4.model.6.mask_weight')
-        for i in range(5, -1, -1):
-            mask_model_key = 'model.model.1.'
-            for j in range(i):
-                mask_model_key += 'model.4.'
-            mask_model_bn_keys.append(mask_model_key + 'model.7.')
-            mask_weight_keys.append(mask_model_key + 'model.8.mask_weight')
+        bn_weight_keys  =  ['model.model.0.',
+                            'model.model.2.model.2.',
+                            'model.model.2.model.4.model.2.',
+                            'model.model.2.model.4.model.4.model.2.',
+                            'model.model.2.model.4.model.4.model.4.model.2.',
+                            'model.model.2.model.4.model.4.model.4.model.4.model.2.',
+                            'model.model.2.model.4.model.4.model.4.model.4.model.4.model.2.',
+                            'model.model.2.model.4.model.4.model.4.model.4.model.4.model.4.model.1.',
+                            'model.model.2.model.4.model.4.model.4.model.4.model.4.model.4.model.5.',
+                            'model.model.2.model.4.model.4.model.4.model.4.model.4.model.7.',
+                            'model.model.2.model.4.model.4.model.4.model.4.model.7.',
+                            'model.model.2.model.4.model.4.model.4.model.7.',
+                            'model.model.2.model.4.model.4.model.7.',
+                            'model.model.2.model.4.model.7.',
+                            'model.model.2.model.7.']
+        mask_weight_keys = ['model.model.1.',
+                            'model.model.2.model.3.',
+                            'model.model.2.model.4.model.3.',
+                            'model.model.2.model.4.model.4.model.3.',
+                            'model.model.2.model.4.model.4.model.4.model.3.',
+                            'model.model.2.model.4.model.4.model.4.model.4.model.3.',
+                            'model.model.2.model.4.model.4.model.4.model.4.model.4.model.3.',
+                            'model.model.2.model.4.model.4.model.4.model.4.model.4.model.4.model.2.',
+                            'model.model.2.model.4.model.4.model.4.model.4.model.4.model.4.model.6.',
+                            'model.model.2.model.4.model.4.model.4.model.4.model.4.model.8.',
+                            'model.model.2.model.4.model.4.model.4.model.4.model.8.',
+                            'model.model.2.model.4.model.4.model.4.model.8.',
+                            'model.model.2.model.4.model.4.model.8.',
+                            'model.model.2.model.4.model.8.',
+                            'model.model.2.model.8.']
 
         for i, mask_weight_key in enumerate(mask_weight_keys):
 
-            mask_weight = state_dict[mask_weight_key]
+            mask_weight = state_dict[mask_weight_key+'mask_weight']
             stable_weight_mask = (mask_weight > bound) & (mask_weight <= last_bound)
 
             for j in range(len(stable_weight_mask)):
 
                 if stable_weight_mask[j]:
                     scale = (mask_weight[j] * stepfunc_params[3] + stepfunc_params[4]) * mask_weight[j] + stepfunc_params[5]
-                    state_dict[mask_model_bn_keys[i] + 'weight'][j] *= scale
-                    if mask_model_bn_keys[i] + 'bias' in state_dict.keys():
-                        state_dict[mask_model_bn_keys[i] + 'bias'][j] *= scale
+                    state_dict[bn_weight_keys[i] + 'weight'][j] *= scale
+                    if bn_weight_keys[i] + 'bias' in state_dict.keys():
+                        state_dict[bn_weight_keys[i] + 'bias'][j] *= scale
 
         model.load_state_dict(state_dict)
 
+    def binary(self, model, boundary):
+
+        for name, module in model.named_modules():
+
+            if isinstance(module, Mask):
+                one_index = module.mask_weight > boundary
+                zero_idnex = module.mask_weight <= boundary
+
+                module.mask_weight.data[one_index] = 1.0
+                module.mask_weight.data[zero_idnex] = -1.0
+
+    def early_stop_mask(self):
+
+        AtoB_bound = 1.0
+        for module in self.netG.modules():
+            if isinstance(module, Mask):
+                AtoB_bound = module.bound.data
+                break
+
+        filter_cfgs, channel_cfgs = self.get_cfg(self.netG.state_dict(), bound=-AtoB_bound)
+
+        new_opt = copy.copy(self.opt)
+        new_opt.mask = False
+        pruned_model = Pix2PixModel(new_opt, filter_cfgs=filter_cfgs, channel_cfgs=channel_cfgs)
+
+        input = torch.randn((1, self.opt.input_nc, self.opt.crop_size, self.opt.crop_size)).to(self.device)
+        AtoB_macs, AtoB_params = profile(pruned_model.netG, inputs=(input,), verbose=False)
+
+        AtoB_macs = AtoB_macs / (1000 ** 3)  # convert bit to GB
+        # AtoB_params = AtoB_params / (1000 ** 2) # convert bit to MB
+
+        if AtoB_macs <= self.opt.AtoB_macs_threshold and not self.stop_mask:
+            self.stable_weight(self.netG, bound=-AtoB_bound)
+            self.binary(self.netG, boundary=-AtoB_bound)
+            self.stop_mask = True
+
+    def get_cfg(self, state_dict, bound=0.0):
+
+        total_filter_cfgs = []
+        total_channel_cfgs = []
+        for k, v in state_dict.items():
+
+            if str.endswith(k, '.mask_weight'):
+                filter_num = int(sum(v > bound))
+                total_filter_cfgs.append(filter_num if filter_num > 0 else 1)
+                if len(total_filter_cfgs) <= 8:  # half conv's channel num only depend on last conv
+                    total_channel_cfgs.append(total_filter_cfgs[-1])
+                elif len(total_filter_cfgs) <= 15:
+                    total_channel_cfgs.append(total_filter_cfgs[15 - len(total_filter_cfgs)] + total_filter_cfgs[-1])
+
+        return total_filter_cfgs, total_channel_cfgs
+
     def prune(self, opt, logger):
 
-        def get_cfg(state_dict, bound=0.0):
-
-            total_filter_cfgs = []
-            total_channel_cfgs = []
-            for k, v in state_dict.items():
-
-                if str.endswith(k, '.mask_weight'):
-
-                    if len(total_filter_cfgs) == 0: # first conv not prune
-                        total_channel_cfgs.append(self.opt.ngf)
-                    elif len(total_filter_cfgs) < 8: # half conv's channel num only depend on last conv
-                        total_channel_cfgs.append(total_filter_cfgs[-1])
-                    elif len(total_filter_cfgs) < 14:
-                        total_channel_cfgs.append(total_filter_cfgs[13-len(total_filter_cfgs)] + total_filter_cfgs[-1])
-
-                    total_filter_cfgs.append(int(sum(v > bound)))
-
-            total_channel_cfgs.append(self.opt.ngf + total_filter_cfgs[-1]) # outermost
-            return total_filter_cfgs, total_channel_cfgs
-
-        def inhert_weight(model, mask_model, bound=0.0):
+        def inhert_weight(model, mask_model, ngf=64, bound=0.0):
 
             state_dict = model.state_dict()
             mask_state_dict = mask_model.state_dict()
 
-            state_dict['model.model.0.weight'] = mask_state_dict['model.model.0.weight']
-            state_dict['model.model.3.bias'] = mask_state_dict['model.model.3.bias']
+            state_dict['model.model.3.bias'] = mask_state_dict['model.model.4.bias']
 
-            pruned_model_keys = []
-            pruned_model_bn_keys = []
-            for i in range(7):
-                pruned_model_key = 'model.model.1.'
-                for j in range(i):
-                    pruned_model_key += 'model.3.'
-                pruned_model_bn_keys.append(pruned_model_key + 'model.2.')
-                pruned_model_key += 'model.1.weight'
-                pruned_model_keys.append(pruned_model_key)
-
-            pruned_model_keys.append('model.model.1.model.3.model.3.model.3.model.3.model.3.model.3.model.3.weight')
-            pruned_model_bn_keys.append('model.model.1.model.3.model.3.model.3.model.3.model.3.model.3.model.4.')
-            for i in range(5, -1, -1):
-                pruned_model_key = 'model.model.1.'
-                for j in range(i):
-                    pruned_model_key += 'model.3.'
-                pruned_model_bn_keys.append(pruned_model_key + 'model.6.')
-                pruned_model_key += 'model.5.weight'
-                pruned_model_keys.append(pruned_model_key)
-            pruned_model_keys.append('model.model.3.weight')
-
-            mask_model_keys = []
-            mask_model_bn_keys = []
-            mask_weight_keys = []
-            for i in range(7):
-                mask_model_key = 'model.model.1.'
-                for j in range(i):
-                    mask_model_key += 'model.4.'
-                mask_model_bn_keys.append(mask_model_key + 'model.2.')
-                if i != 6:
-                    mask_weight_keys.append(mask_model_key + 'model.3.mask_weight')
-                else:
-                    mask_weight_keys.append(mask_model_key + 'model.2.mask_weight')
-                mask_model_key += 'model.1.weight'
-                mask_model_keys.append(mask_model_key)
-
-            mask_model_keys.append('model.model.1.model.4.model.4.model.4.model.4.model.4.model.4.model.4.weight')
-            mask_model_bn_keys.append('model.model.1.model.4.model.4.model.4.model.4.model.4.model.4.model.5.')
-            mask_weight_keys.append('model.model.1.model.4.model.4.model.4.model.4.model.4.model.4.model.6.mask_weight')
-            for i in range(5, -1, -1):
-                mask_model_key = 'model.model.1.'
-                for j in range(i):
-                    mask_model_key += 'model.4.'
-                mask_model_bn_keys.append(mask_model_key + 'model.7.')
-                mask_weight_keys.append(mask_model_key + 'model.8.mask_weight')
-                mask_model_key += 'model.6.weight'
-                mask_model_keys.append(mask_model_key)
-            mask_model_keys.append('model.model.3.weight')
+            pruned_model_keys= ['model.model.0.weight',
+                                'model.model.1.model.1.weight',
+                                'model.model.1.model.3.model.1.weight',
+                                'model.model.1.model.3.model.3.model.1.weight',
+                                'model.model.1.model.3.model.3.model.3.model.1.weight',
+                                'model.model.1.model.3.model.3.model.3.model.3.model.1.weight',
+                                'model.model.1.model.3.model.3.model.3.model.3.model.3.model.1.weight',
+                                'model.model.1.model.3.model.3.model.3.model.3.model.3.model.3.model.1.weight',
+                                'model.model.1.model.3.model.3.model.3.model.3.model.3.model.3.model.3.weight',
+                                'model.model.1.model.3.model.3.model.3.model.3.model.3.model.5.weight',
+                                'model.model.1.model.3.model.3.model.3.model.3.model.5.weight',
+                                'model.model.1.model.3.model.3.model.3.model.5.weight',
+                                'model.model.1.model.3.model.3.model.5.weight',
+                                'model.model.1.model.3.model.5.weight',
+                                'model.model.1.model.5.weight',
+                                'model.model.3.weight']
+            pruned_bn_keys =   ['model.model.1.model.2.',
+                                'model.model.1.model.3.model.2.',
+                                'model.model.1.model.3.model.3.model.2.',
+                                'model.model.1.model.3.model.3.model.3.model.2.',
+                                'model.model.1.model.3.model.3.model.3.model.3.model.2.',
+                                'model.model.1.model.3.model.3.model.3.model.3.model.3.model.2.',
+                                'model.model.1.model.3.model.3.model.3.model.3.model.3.model.3.model.4.',
+                                'model.model.1.model.3.model.3.model.3.model.3.model.3.model.6.',
+                                'model.model.1.model.3.model.3.model.3.model.3.model.6.',
+                                'model.model.1.model.3.model.3.model.3.model.6.',
+                                'model.model.1.model.3.model.3.model.6.',
+                                'model.model.1.model.3.model.6.',
+                                'model.model.1.model.6.']
+            mask_model_keys =  ['model.model.0.weight',
+                                'model.model.2.model.1.weight',
+                                'model.model.2.model.4.model.1.weight',
+                                'model.model.2.model.4.model.4.model.1.weight',
+                                'model.model.2.model.4.model.4.model.4.model.1.weight',
+                                'model.model.2.model.4.model.4.model.4.model.4.model.1.weight',
+                                'model.model.2.model.4.model.4.model.4.model.4.model.4.model.1.weight',
+                                'model.model.2.model.4.model.4.model.4.model.4.model.4.model.4.model.1.weight',
+                                'model.model.2.model.4.model.4.model.4.model.4.model.4.model.4.model.4.weight',
+                                'model.model.2.model.4.model.4.model.4.model.4.model.4.model.6.weight',
+                                'model.model.2.model.4.model.4.model.4.model.4.model.6.weight',
+                                'model.model.2.model.4.model.4.model.4.model.6.weight',
+                                'model.model.2.model.4.model.4.model.6.weight',
+                                'model.model.2.model.4.model.6.weight',
+                                'model.model.2.model.6.weight',
+                                'model.model.4.weight']
+            mask_model_bn_keys=['model.model.2.model.2.',
+                                'model.model.2.model.4.model.2.',
+                                'model.model.2.model.4.model.4.model.2.',
+                                'model.model.2.model.4.model.4.model.4.model.2.',
+                                'model.model.2.model.4.model.4.model.4.model.4.model.2.',
+                                'model.model.2.model.4.model.4.model.4.model.4.model.4.model.2.',
+                                'model.model.2.model.4.model.4.model.4.model.4.model.4.model.4.model.5.',
+                                'model.model.2.model.4.model.4.model.4.model.4.model.4.model.7.',
+                                'model.model.2.model.4.model.4.model.4.model.4.model.7.',
+                                'model.model.2.model.4.model.4.model.4.model.7.',
+                                'model.model.2.model.4.model.4.model.7.',
+                                'model.model.2.model.4.model.7.',
+                                'model.model.2.model.7.']
+            mask_weight_keys = ['model.model.1.mask_weight',
+                                'model.model.2.model.3.mask_weight',
+                                'model.model.2.model.4.model.3.mask_weight',
+                                'model.model.2.model.4.model.4.model.3.mask_weight',
+                                'model.model.2.model.4.model.4.model.4.model.3.mask_weight',
+                                'model.model.2.model.4.model.4.model.4.model.4.model.3.mask_weight',
+                                'model.model.2.model.4.model.4.model.4.model.4.model.4.model.3.mask_weight',
+                                'model.model.2.model.4.model.4.model.4.model.4.model.4.model.4.model.2.mask_weight',
+                                'model.model.2.model.4.model.4.model.4.model.4.model.4.model.4.model.6.mask_weight',
+                                'model.model.2.model.4.model.4.model.4.model.4.model.4.model.8.mask_weight',
+                                'model.model.2.model.4.model.4.model.4.model.4.model.8.mask_weight',
+                                'model.model.2.model.4.model.4.model.4.model.8.mask_weight',
+                                'model.model.2.model.4.model.4.model.8.mask_weight',
+                                'model.model.2.model.4.model.8.mask_weight',
+                                'model.model.2.model.8.mask_weight']
 
             last_mask = None
-
-            has_pruned_keys = []
+            bn_key_index = 0
 
             for i, pruned_model_key in enumerate(pruned_model_keys):
 
-                pruned_model_bn_key = pruned_model_bn_keys[i % len(pruned_model_bn_keys)] # last conv has not bn
                 mask_model_key = mask_model_keys[i]
-                mask_model_bn_key = mask_model_bn_keys[i % len(mask_model_bn_keys)] # last conv has not bn
                 mask_weight_key = mask_weight_keys[i % len(mask_weight_keys)] # last conv has not mask_layer
                 current_mask = mask_state_dict[mask_weight_key] > bound
 
                 new_filter_index = 0
                 new_channel_index = 0
 
-                if i == 0: # only prune filter
+                if i == 0: # only prune filter, first unetblock\' downconv has not norm
                     print('Pruning1: ', pruned_model_key)
-
-                    has_pruned_keys.append(pruned_model_key)
-                    has_pruned_keys.append(pruned_model_bn_key+'weight')
-                    has_pruned_keys.append(pruned_model_bn_key+'bias')
-                    has_pruned_keys.append(pruned_model_bn_key+'running_mean')
-                    has_pruned_keys.append(pruned_model_bn_key+'running_var')
 
                     for j in range(len(current_mask)):
                         if current_mask[j]:
                             state_dict[pruned_model_key][new_filter_index] = mask_state_dict[mask_model_key][j]
-                            state_dict[pruned_model_bn_key+'weight'][new_filter_index] = mask_state_dict[mask_model_bn_key+'weight'][j]
-                            state_dict[pruned_model_bn_key+'bias'][new_filter_index] = mask_state_dict[mask_model_bn_key+'bias'][j]
-                            state_dict[pruned_model_bn_key+'running_mean'][new_filter_index] = mask_state_dict[mask_model_bn_key+'running_mean'][j]
-                            state_dict[pruned_model_bn_key+'running_var'][new_filter_index] = mask_state_dict[mask_model_bn_key+'running_var'][j]
                             new_filter_index += 1
                 elif i == len(pruned_model_keys) - 1: # only prune channel
                     print('Pruning2: ', pruned_model_key)
 
-                    for j in range(self.opt.ngf):
-                        state_dict[pruned_model_key][j, :, :, :] = mask_state_dict[mask_model_key][j, :, :, :]
+                    firstlayer_mask = mask_state_dict[mask_weight_keys[0]] > bound
+
+                    for j in range(len(firstlayer_mask)):
+                        if firstlayer_mask[j]:
+                            state_dict[pruned_model_key][new_channel_index, :, :, :] = \
+                                mask_state_dict[mask_model_key][j, :, :, :]
+                            new_channel_index += 1
                     for j in range(len(last_mask)):
                         if last_mask[j]:
-                            state_dict[pruned_model_key][self.opt.ngf + new_channel_index, :, :, :] = \
-                                mask_state_dict[mask_model_key][self.opt.ngf + j, :, :, :]
+                            state_dict[pruned_model_key][new_channel_index, :, :, :] = \
+                                mask_state_dict[mask_model_key][ngf + j, :, :, :]
                             new_channel_index += 1
-                elif i <= 6: # downconv
+                elif i <= 7: # downconv
                     print('Pruning3: ', pruned_model_key)
-                    has_pruned_keys.append(pruned_model_key)
-                    has_pruned_keys.append(pruned_model_bn_key + 'weight')
-                    has_pruned_keys.append(pruned_model_bn_key + 'bias')
-                    has_pruned_keys.append(pruned_model_bn_key + 'running_mean')
-                    has_pruned_keys.append(pruned_model_bn_key + 'running_var')
+
+                    if i != 7: # innermost conv has not bn
+                        pruned_model_bn_key = pruned_bn_keys[bn_key_index]
+                        mask_model_bn_key = mask_model_bn_keys[bn_key_index]
+                        bn_key_index += 1
 
                     for j in range(len(current_mask)):
                         if current_mask[j]:
@@ -525,20 +631,19 @@ class MaskPix2PixModel(nn.Module):
                                     state_dict[pruned_model_key][new_filter_index, new_channel_index, :, :] = \
                                         mask_state_dict[mask_model_key][j, k, :, :]
                                     new_channel_index += 1
-                            if (pruned_model_bn_key + 'weight') in state_dict.keys(): # innermost conv has not bn
+                            if i != 7: # innermost conv has not bn
                                 state_dict[pruned_model_bn_key + 'weight'][new_filter_index] = mask_state_dict[mask_model_bn_key + 'weight'][j]
                                 state_dict[pruned_model_bn_key + 'bias'][new_filter_index] = mask_state_dict[mask_model_bn_key + 'bias'][j]
                                 state_dict[pruned_model_bn_key + 'running_mean'][new_filter_index] = mask_state_dict[mask_model_bn_key + 'running_mean'][j]
                                 state_dict[pruned_model_bn_key + 'running_var'][new_filter_index] = mask_state_dict[mask_model_bn_key + 'running_var'][j]
 
                             new_filter_index += 1
-                elif i == 7: # innermost upconv
+                elif i == 8: # innermost upconv
                     print('Pruning4: ', pruned_model_key)
-                    has_pruned_keys.append(pruned_model_key)
-                    has_pruned_keys.append(pruned_model_bn_key + 'weight')
-                    has_pruned_keys.append(pruned_model_bn_key + 'bias')
-                    has_pruned_keys.append(pruned_model_bn_key + 'running_mean')
-                    has_pruned_keys.append(pruned_model_bn_key + 'running_var')
+
+                    pruned_model_bn_key = pruned_bn_keys[bn_key_index]
+                    mask_model_bn_key = mask_model_bn_keys[bn_key_index]
+                    bn_key_index += 1
 
                     for j in range(len(current_mask)):
                         if current_mask[j]:
@@ -555,12 +660,12 @@ class MaskPix2PixModel(nn.Module):
                             new_filter_index += 1
                 else: # other upconv
                     print('Pruning5: ', pruned_model_key)
-                    has_pruned_keys.append(pruned_model_key)
-                    has_pruned_keys.append(pruned_model_bn_key + 'weight')
-                    has_pruned_keys.append(pruned_model_bn_key + 'bias')
-                    has_pruned_keys.append(pruned_model_bn_key + 'running_mean')
-                    has_pruned_keys.append(pruned_model_bn_key + 'running_var')
-                    mapping_conv_mask = mask_state_dict[mask_weight_keys[13-i]] > bound
+
+                    pruned_model_bn_key = pruned_bn_keys[bn_key_index]
+                    mask_model_bn_key = mask_model_bn_keys[bn_key_index]
+                    bn_key_index += 1
+
+                    mapping_conv_mask = mask_state_dict[mask_weight_keys[15-i]] > bound
 
                     for j in range(len(current_mask)):
 
@@ -584,15 +689,12 @@ class MaskPix2PixModel(nn.Module):
 
                 last_mask = current_mask
 
-            # for k, v in state_dict.items():
-            #     if k not in has_pruned_keys:
-            #         print(k)
             model.load_state_dict(state_dict)
 
         fid, _ = self.load_models(opt.load_path)
         logger.info('After Training. FID: %.2f' % fid)
 
-        filter_cfgs, channel_cfgs = get_cfg(self.netG.state_dict())
+        filter_cfgs, channel_cfgs = self.get_cfg(self.netG.state_dict())
 
         logger.info(filter_cfgs)
         logger.info(channel_cfgs)
@@ -601,7 +703,7 @@ class MaskPix2PixModel(nn.Module):
         new_opt.mask = False
         pruned_model = Pix2PixModel(new_opt, filter_cfgs=filter_cfgs, channel_cfgs=channel_cfgs)
 
-        inhert_weight(pruned_model.netG, self.netG, bound=0.0)
+        inhert_weight(pruned_model.netG, self.netG, ngf=self.opt.ngf, bound=0.0)
 
         logger.info('Prune done!!!')
         return pruned_model
