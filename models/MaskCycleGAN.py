@@ -94,7 +94,7 @@ class MaskResnetGenerator(nn.Module):
             mult = 2 ** i
             model += [nn.Conv2d(ngf * mult, ngf * mult * 2, kernel_size=3, stride=2, padding=1, bias=use_bias),
                       norm_layer(ngf * mult * 2),
-                      Mask(ngf * mult * 2, mask_loss_type=self.opt.mask_loss_type),
+                      Mask(ngf * mult * 2, mask_loss_type=self.opt.mask_loss_type if i != 1 else upconv_mask_loss_type),
                       nn.ReLU(True)]
 
         mult = 2 ** n_downsampling
@@ -465,8 +465,12 @@ class MaskCycleGANModel(nn.Module):
 
         if not self.stop_AtoB_mask:
             self.stable_weight(self.netG_A, bound=bound)
+        else:
+            print('AtoB early stop!')
         if not self.stop_BtoA_mask:
             self.stable_weight(self.netG_B, bound=bound)
+        else:
+            print('BtoA early stop!')
 
         self.netG_A.update_masklayer(bound if not self.stop_AtoB_mask else 0.0)
         self.netG_B.update_masklayer(bound if not self.stop_BtoA_mask else 0.0)

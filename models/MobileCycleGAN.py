@@ -419,6 +419,7 @@ class MobileCycleGANModel(nn.Module):
         if self.opt.pretrain_path is None or not os.path.exists(self.opt.pretrain_path):
             raise FileExistsError('The pretrain model path must be exist!!!')
         new_opt = copy.copy(self.opt)
+        new_opt.ngf = 64
         new_opt.lambda_attention_distill = 0.0
         new_opt.lambda_discriminator_distill = 0.0
         self.teacher_model = MobileCycleGANModel(new_opt)
@@ -496,6 +497,7 @@ class MobileCycleGANModel(nn.Module):
         if self.opt.pretrain_path is None or not os.path.exists(self.opt.pretrain_path):
             raise FileExistsError('The pretrain model path must be exist!!!')
         new_opt = copy.copy(self.opt)
+        new_opt.ngf = 64
         new_opt.lambda_attention_distill = 0.0
         new_opt.lambda_discriminator_distill = 0.0
         if self.teacher_model is None:
