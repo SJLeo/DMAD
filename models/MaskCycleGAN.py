@@ -94,7 +94,7 @@ class MaskResnetGenerator(nn.Module):
             mult = 2 ** i
             model += [nn.Conv2d(ngf * mult, ngf * mult * 2, kernel_size=3, stride=2, padding=1, bias=use_bias),
                       norm_layer(ngf * mult * 2),
-                      Mask(ngf * mult * 2, mask_loss_type=self.opt.mask_loss_type if i != 1 else upconv_mask_loss_type),
+                      Mask(ngf * mult * 2, mask_loss_type=self.opt.mask_loss_type if i == 1 else upconv_mask_loss_type),
                       nn.ReLU(True)]
 
         mult = 2 ** n_downsampling
@@ -166,7 +166,7 @@ class MaskResnetGenerator(nn.Module):
         for i in range(13, 22, 1):
             group_mask_weight_names.append('model.%d.conv_block.8' % i)
 
-        residual_mask = [True for _ in range(256)]
+        residual_mask = [True for _ in range(self.opt.ngf * 4)]
 
         for name, module in self.named_modules():
             if isinstance(module, Mask):

@@ -164,7 +164,7 @@ def test(model, opt, logger, epoch, best_AtoB_fid, best_BtoA_fid, best_AtoB_epoc
             logger.info('mIoU: %.2f' % fid)
 
             if fid >= best_AtoB_fid and (
-                    not opt.mask or (opt.mask and (epoch > all_total_iters * 0.75 or model.stop_AtoB_mask))):
+                    not opt.mask or (opt.mask and (epoch > all_total_iters * 0.75 or model.stop_mask))):
                 best_AtoB_fid = fid
                 best_AtoB_epoch = epoch
                 model.save_models(epoch, os.path.join(opt.checkpoints_dir, opt.name, 'checkpoints'),
@@ -174,7 +174,7 @@ def test(model, opt, logger, epoch, best_AtoB_fid, best_BtoA_fid, best_AtoB_epoc
             logger.info('FID: %.2f' % fid)
 
             if fid <= best_AtoB_fid and (
-                    not opt.mask or (opt.mask and (epoch > all_total_iters * 0.75 or model.stop_AtoB_mask))):
+                    not opt.mask or (opt.mask and (epoch > all_total_iters * 0.75 or model.stop_mask))):
                 best_AtoB_fid = fid
                 best_AtoB_epoch = epoch
 
