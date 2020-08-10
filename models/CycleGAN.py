@@ -232,6 +232,9 @@ class CycleGANModel(nn.Module):
 
         if self.opt.lambda_attention_distill > 0 or self.opt.lambda_discriminator_distill > 0:
 
+            self.fake_B = self.netG_A(self.real_A)  # G_A(A)
+            self.fake_A = self.netG_B(self.real_B)  # G_B(B)
+
             teacher_fake_B = self.teacher_model.netG_A(self.real_A)  # G_A(A)
             teacher_fake_A = self.teacher_model.netG_B(self.real_B)  # G_B(B)
 
