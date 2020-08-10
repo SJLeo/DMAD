@@ -153,7 +153,7 @@ if __name__ == '__main__':
         raise FileExistsError('Load path must be exist!!!')
     device = torch.device(f'cuda:{opt.gpu_ids[0]}') if len(opt.gpu_ids) > 0 else 'cpu'
     ckpt = torch.load(opt.load_path, map_location=device)
-    cfg = ckpt['cfg'] if 'cfg' in ckpt.keys() else None
+    cfg = ckpt['cfg'] if 'cfg' in ckpt.keys() else (None, None)
 
     # create model
     if opt.model == 'cyclegan':

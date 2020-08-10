@@ -722,7 +722,7 @@ class MaskCycleGANModel(nn.Module):
                                     state_dict[pruned_model_key+'weight'][new_channel_index, new_filter_index, :, :] = \
                                         mask_state_dict[mask_model_key+'weight'][k, j, :, :]
                                     new_channel_index += 1
-                            state_dict[pruned_model_key+'bias'][new_filter_indgetex] = mask_state_dict[mask_model_key+'bias'][j]
+                            state_dict[pruned_model_key+'bias'][new_filter_index] = mask_state_dict[mask_model_key+'bias'][j]
                             new_filter_index += 1
 
                 else:
