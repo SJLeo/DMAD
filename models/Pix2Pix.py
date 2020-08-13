@@ -345,7 +345,7 @@ class Pix2PixModel(nn.Module):
                                          'model.model.1.model.3.model.3.model.3.model.2',
                                          'model.model.1.model.3.model.3.model.3.model.3.model.6',
                                          'model.model.1.model.3.model.6']
-        self.teacher_extract_D_layers = ['model.4', 'model.10']
+        self.teacher_extract_D_layers = ['model.4']#, 'model.10']
         self.student_extract_G_layers = ['model.model.1.model.2',
                                          'model.model.1.model.3.model.3.model.3.model.2',
                                          'model.model.1.model.3.model.3.model.3.model.3.model.6',
@@ -376,12 +376,12 @@ class Pix2PixModel(nn.Module):
                                    self.total_feature_out_student.values()]
 
         # interpolate D's 31*31 to 64*64 attention map
-        total_attention_D_teacher[1] = util.attention_interpolate(total_attention_D_teacher[1])
+        # total_attention_D_teacher[1] = util.attention_interpolate(total_attention_D_teacher[1])
 
         # interpolate D's size to 8*8 attention map
         total_attention_D_teacher_8x8 = [
             util.attention_interpolate(total_attention_D_teacher[0], (8, 8)),
-            util.attention_interpolate(total_attention_D_teacher[1], (8, 8))
+            # util.attention_interpolate(total_attention_D_teacher[1], (8, 8))
         ]
 
         total_mixup_attention = []
@@ -389,12 +389,12 @@ class Pix2PixModel(nn.Module):
         for i in range(len(total_attention_teacher)):
             if i == 0 or i == len(total_attention_teacher) - 1: # 64* 64
                 total_mixup_attention.append(util.mixup_attention(
-                    [total_attention_teacher[i], total_attention_D_teacher[0], total_attention_D_teacher[1]],
-                    [0.5, 0.25, 0.25]))
+                    [total_attention_teacher[i], total_attention_D_teacher[0]],
+                    [0.5, 0.5]))
             else: # 8*8
                 total_mixup_attention.append(util.mixup_attention(
-                    [total_attention_teacher[i], total_attention_D_teacher_8x8[0], total_attention_D_teacher_8x8[1]],
-                    [0.5, 0.25, 0.25]))
+                    [total_attention_teacher[i], total_attention_D_teacher_8x8[0]],
+                    [0.5, 0.5]))
 
         total_distill_loss = 0.0
         for i in range(len(total_attention_teacher)):
