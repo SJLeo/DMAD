@@ -238,8 +238,8 @@ class MaskCycleGANModel(nn.Module):
         visual_names_B = ['real_B', 'fake_A', 'rec_B', 'idt_A']
         self.visual_names = visual_names_A + visual_names_B
 
-        self.netG_A = MaskResnetGenerator(opt=self.opt)
-        self.netG_B = MaskResnetGenerator(opt=self.opt)
+        self.netG_A = MaskResnetGenerator(ngf=self.opt.ngf, opt=self.opt)
+        self.netG_B = MaskResnetGenerator(ngf=self.opt.ngf, opt=self.opt)
 
         self.netD_A = NLayerDiscriminator()
         self.netD_B = NLayerDiscriminator()
