@@ -704,6 +704,7 @@ class MaskPix2PixModel(nn.Module):
         pruned_model = Pix2PixModel(new_opt, filter_cfgs=filter_cfgs, channel_cfgs=channel_cfgs)
 
         inhert_weight(pruned_model.netG, self.netG, ngf=self.opt.ngf, bound=0.0)
-
+        ckpt = torch.load(opt.load_path, map_location=self.device)
+        pruned_model.netD.load_state_dict(ckpt['D'])
         logger.info('Prune done!!!')
         return pruned_model
