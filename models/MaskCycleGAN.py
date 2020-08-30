@@ -454,8 +454,10 @@ class MaskCycleGANModel(nn.Module):
         else:
             if self.opt.update_bound_rule == 'cube':
                 bound = 1 - math.pow(float(current_iter) / update_bound_iters_count, 1 / 3)
-            else:
+            elif self.opt.update_bound_rule == 'double':
                 bound = 1 - math.pow(float(current_iter) / update_bound_iters_count, 1 / 2)
+            else:
+                bound = 1 - float(current_iter) / update_bound_iters_count, 1 / 2
 
             if bound < 0:
                 bound = 0.0

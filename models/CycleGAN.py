@@ -468,12 +468,16 @@ class CycleGANModel(nn.Module):
         total_mixup_attention_BtoA = []
 
         for i in range(len(total_attention_AtoB_teacher)):
-            total_mixup_attention_AtoB.append(util.mixup_attention(
-                [total_attention_AtoB_teacher[i], total_attention_DA_teacher[0]],
-                [0.5, 0.5]))
-            total_mixup_attention_BtoA.append(util.mixup_attention(
-                [total_attention_BtoA_teacher[i], total_attention_DB_teacher[0]],
-                [0.5, 0.5]))
+            if self.opt.solo:
+                total_mixup_attention_AtoB.append(total_attention_AtoB_teacher[i])
+                total_mixup_attention_BtoA.append(total_attention_BtoA_teacher[i])
+            else:
+                total_mixup_attention_AtoB.append(util.mixup_attention(
+                    [total_attention_AtoB_teacher[i], total_attention_DA_teacher[0]],
+                    [0.5, 0.5]))
+                total_mixup_attention_BtoA.append(util.mixup_attention(
+                    [total_attention_BtoA_teacher[i], total_attention_DB_teacher[0]],
+                    [0.5, 0.5]))
 
         total_distill_loss = 0.0
         for i in range(len(total_attention_AtoB_teacher)):

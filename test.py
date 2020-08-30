@@ -113,6 +113,7 @@ def test_pix2pix_mIoU(model, opt):
 
         with torch.no_grad():
             model.forward()
+
         visuals = model.get_current_visuals()
         fake_B[data['A_paths'][0]] = visuals['fake_B']
 

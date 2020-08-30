@@ -96,7 +96,7 @@ parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L
 parser.add_argument('--lambda_group_lasso', type=float, default=0.0, help='weight for group lasso to sparsity resblock. default:0.00')
 parser.add_argument('--lambda_attention_distill', type=float, default=0.0, help='weight for distill attention. default:0')
 parser.add_argument('--lambda_discriminator_distill', type=float, default=0.0, help='weight for distill discriminator\'s feature map. default:0.0')
-# parser.add_argument('--solo', type=bool, default=False, help='add Discriminator attention map. defualt:False')
+parser.add_argument('--solo', action='store_true', help='add Discriminator attention map. defualt:False')
 parser.add_argument('--attention_normal', type=bool, default=True, help='normalize for attention map')
 parser.add_argument('--frozen_threshold', type=float, default=0.85, help='The threshold of frozen mask. default:0.85')
 parser.add_argument('--threshold', type=int, default=0, help='The threshold of pruning block. default:0')
