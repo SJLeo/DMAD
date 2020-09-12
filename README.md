@@ -1,3 +1,11 @@
+## Learning Efﬁcient GANs using Differentiable Masks and Co-Attention Distillation 
+
+<div align=center><img src="img/framework.png" height = "50%" width = "60%"/></div>
+
+Framework of our method. We first build a pre-trained model similar to a GAN network, upon which a differentiable mask is imposed to scale the convolutional outputs of the generator and derive a light-weight one. Then, the co-Attention of the pre-trained GAN and the outputs of the last-layer convolutions of the discriminator are distilled to stabilize the training of the light-weight model.
+
+
+
 #### CycleGAN
 
 ```shell

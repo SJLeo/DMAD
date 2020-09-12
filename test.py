@@ -186,6 +186,7 @@ if __name__ == '__main__':
     else:
         raise NotImplementedError('%s not implemented' % opt.model)
 
+    get_flops_parms(model, opt, opt.model)
     model.load_models(opt.load_path)
 
     if opt.model == 'cyclegan' or opt.model == 'mobilecyclegan':
