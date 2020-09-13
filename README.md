@@ -92,9 +92,9 @@ You can use the following code to test our compression models.
 
 ```shell
 python test.py 
-	--dataroot ./database/horse2zebra
-	--model cyclegan
-	--load_path ./result/horse2zebra.pth
+--dataroot ./database/horse2zebra
+--model cyclegan
+--load_path ./result/horse2zebra.pth
 ```
 
 ### Tips
