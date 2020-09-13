@@ -1,4 +1,4 @@
-## Learning Efﬁcient GANs using Differentiable Masks and Co-Attention Distillation 
+## Learning Efficient GANs using Differentiable Masks and Co-Attention Distillation 
 
 <div align=center><img src="img/framework.png" height = "50%" width = "60%"/></div>
 
