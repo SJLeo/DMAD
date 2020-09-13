@@ -1,4 +1,5 @@
-python prune.py --dataroot ../datasets/cityscapes \
+#!/usr/bin/env bash
+python prune.py --dataroot ./database/cityscapes \
   --model mobilepix2pix \
   --mask \
   --checkpoints_dir ./experiments/mobile_mask_cityscapes \

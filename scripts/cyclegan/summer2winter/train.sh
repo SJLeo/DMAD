@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-python train.py --dataroot ../datasets/summer2winter \
+python train.py --dataroot ./database/summer2winter \
   --model cyclegan \
   --mask \
   --mask_weight_decay 0.001 \

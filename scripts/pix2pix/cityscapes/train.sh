@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-python train.py --dataroot ../datasets/cityscapes \
+python train.py --dataroot ./database/cityscapes \
   --model pix2pix \
   --mask \
   --mask_weight_decay 0.01 \

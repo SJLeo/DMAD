@@ -1,4 +1,5 @@
-python prune.py --dataroot ../datasets/horse2zebra \
+#!/usr/bin/env bash
+python prune.py --dataroot ./database/horse2zebra \
   --model mobilecyclegan \
   --mask \
   --ngf 32 \

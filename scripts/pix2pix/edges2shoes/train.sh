@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-python train.py --dataroot ../datasets/edges2shoes \
+python train.py --dataroot ./database/edges2shoes-r \
   --model pix2pix \
   --mask \
   --mask_weight_decay 0.01 \

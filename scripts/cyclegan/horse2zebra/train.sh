@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-python train.py --dataroot ../datasets/horse2zebra \
+python train.py --dataroot ./database/horse2zebra \
   --model cyclegan \
   --mask \
   --mask_weight_decay 0.001 \

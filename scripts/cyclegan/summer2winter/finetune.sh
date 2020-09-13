@@ -1,4 +1,5 @@
-python prune.py --dataroot ../datasets/summer2winter \
+#!/usr/bin/env bash
+python prune.py --dataroot ./database/summer2winter \
   --model cyclegan \
   --mask \
   --checkpoints_dir ./experiments/mask_summer2winter \

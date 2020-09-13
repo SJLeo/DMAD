@@ -1,4 +1,5 @@
-python prune.py --dataroot ../datasets/edges2shoes \
+#!/usr/bin/env bash
+python prune.py --dataroot ./database/edges2shoes-r \
   --model mobilepix2pix \
   --mask \
   --checkpoints_dir ./experiments/mobile_mask_edges2shoes \

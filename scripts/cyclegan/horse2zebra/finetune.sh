@@ -1,4 +1,5 @@
-python prune.py --dataroot ../datasets/horse2zebra \
+#!/usr/bin/env bash
+python prune.py --dataroot ./database/horse2zebra \
   --model cyclegan \
   --mask \
   --checkpoints_dir ./experiments/mask_horse2zebra \
