@@ -438,7 +438,7 @@ class MobileCycleGANModel(nn.Module):
         self.total_feature_out_DB_teacher = {}
 
         self.teacher_extract_G_layers = ['model.9', 'model.12', 'model.15', 'model.18']
-        self.teacher_extract_D_layers = ['model.4']#, 'model.10']
+        self.teacher_extract_D_layers = ['model.4']
         self.student_extract_G_layers = ['model.9', 'model.12', 'model.15', 'model.18']
 
         def get_activation(maps, name):
@@ -472,10 +472,6 @@ class MobileCycleGANModel(nn.Module):
                                         self.total_feature_out_AtoB_student.values()]
         total_attention_BtoA_student = [f.pow(2).mean(1, keepdim=True) for f in
                                         self.total_feature_out_BtoA_student.values()]
-
-        # total_attention_DA_teacher[1] = util.attention_interpolate(
-        #     total_attention_DA_teacher[1])  # interpolate attention map from 31*31 to 64*64
-        # total_attention_DB_teacher[1] = util.attention_interpolate(total_attention_DB_teacher[1])
 
         total_mixup_attention_AtoB = []
         total_mixup_attention_BtoA = []
@@ -544,24 +540,3 @@ class MobileCycleGANModel(nn.Module):
             total_distill_loss += torch.norm(self.total_feature_out_DA_teacher_discriminator[i] - self.total_feature_out_DA_student_discriminator[i], 2)
             total_distill_loss += torch.norm(self.total_feature_out_DB_teacher_discriminator[i] - self.total_feature_out_DB_student_discriminator[i], 2)
         return total_distill_loss
-
-
-# class opts():
-#     mask_loss_type = 'relu'
-#     upconv_solo = True,
-#     upconv_bound = True,
-#     upconv_relu = False,
-#     gpu_ids = []
-# cfg = None
-# # cfg = [64, 128, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 128, 64]
-# moblie_model = MobileResnetGenerator(input_nc=3, output_nc=3, ngf=64, opt=opts(), cfg=cfg)
-# print(moblie_model)
-#
-# for k, v in moblie_model.state_dict().items():
-#     print(k, v.size())
-#
-# input = torch.randn((1, 3, 256, 256))
-# print(moblie_model(input).size())
-# from thop import profile
-# macs, params = profile(moblie_model, (input, ))
-# print(macs, params)

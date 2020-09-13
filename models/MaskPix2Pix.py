@@ -17,7 +17,7 @@ from thop import profile
 class MaskUnetSkipConnectionBlock(nn.Module):
 
     def __init__(self, outer_nc, inner_nc, input_nc=None, submodule=None,
-                 outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False, opt=None, down_loss_type=None, up_loss_type=None):
+                 outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False, opt=None):
         super(MaskUnetSkipConnectionBlock, self).__init__()
         self.opt = opt
         self.outermost = outermost
@@ -32,10 +32,10 @@ class MaskUnetSkipConnectionBlock(nn.Module):
                              stride=2, padding=1, bias=use_bias)
         downrelu = nn.LeakyReLU(0.2, True)
         downnorm = norm_layer(inner_nc)
-        downmask = Mask(inner_nc, mask_loss_type=self.opt.mask_loss_type if down_loss_type is None else down_loss_type)
+        downmask = Mask(inner_nc, mask_loss_type=self.opt.mask_loss_type)
         uprelu = nn.ReLU(True)
         upnorm = norm_layer(outer_nc)
-        upmask = Mask(outer_nc, mask_loss_type=self.opt.mask_loss_type if up_loss_type is None else up_loss_type)
+        upmask = Mask(outer_nc, mask_loss_type=self.opt.mask_loss_type)
 
         if outermost:
             upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
@@ -77,33 +77,21 @@ class MaskUnetGenertor(nn.Module):
         super(MaskUnetGenertor, self).__init__()
         self.opt = opt
         device = torch.device(f'cuda:{opt.gpu_ids[0]}') if len(opt.gpu_ids) > 0 else 'cpu'
-        bound_loss_index = self.opt.bound_loss_index
         unet_block = MaskUnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=None,
-                                                 norm_layer=norm_layer, innermost=True, opt=self.opt,
-                                                 down_loss_type='bound' if bound_loss_index[7] else None,
-                                                 up_loss_type='bound' if bound_loss_index[8] else None)
+                                                 norm_layer=norm_layer, innermost=True, opt=self.opt)
         for i in range(num_downs - 5):
             unet_block = MaskUnetSkipConnectionBlock(ngf * 8, ngf * 8, input_nc=None, submodule=unet_block,
-                                                     norm_layer=norm_layer, use_dropout=use_dropout, opt=self.opt,
-                                                     down_loss_type='bound' if bound_loss_index[4 + i] else None,
-                                                     up_loss_type='bound' if bound_loss_index[11 - i] else None)
+                                                     norm_layer=norm_layer, use_dropout=use_dropout, opt=self.opt)
 
         unet_block = MaskUnetSkipConnectionBlock(ngf * 4, ngf * 8, input_nc=None, submodule=unet_block,
-                                                 norm_layer=norm_layer, opt=self.opt,
-                                                 down_loss_type='bound' if bound_loss_index[3] else None,
-                                                 up_loss_type='bound' if bound_loss_index[12] else None)
+                                                 norm_layer=norm_layer, opt=self.opt)
         unet_block = MaskUnetSkipConnectionBlock(ngf * 2, ngf * 4, input_nc=None, submodule=unet_block,
-                                                 norm_layer=norm_layer, opt=self.opt,
-                                                 down_loss_type='bound' if bound_loss_index[2] else None,
-                                                 up_loss_type='bound' if bound_loss_index[13] else None)
+                                                 norm_layer=norm_layer, opt=self.opt)
         unet_block = MaskUnetSkipConnectionBlock(ngf, ngf * 2, input_nc=None, submodule=unet_block,
-                                                 norm_layer=norm_layer, opt=self.opt,
-                                                 down_loss_type='bound' if bound_loss_index[1] else None,
-                                                 up_loss_type='bound' if bound_loss_index[14] else None)
+                                                 norm_layer=norm_layer, opt=self.opt)
         self.model = MaskUnetSkipConnectionBlock(output_nc, ngf, input_nc=input_nc, submodule=unet_block,
                                                  outermost=True,
-                                                 norm_layer=norm_layer, opt=self.opt,
-                                                 down_loss_type='bound' if bound_loss_index[0] else None)
+                                                 norm_layer=norm_layer, opt=self.opt)
         self.layer_sparsity_coeff = torch.FloatTensor([1.0] * 15).to(device)
 
     def update_masklayer(self, bound):
@@ -144,7 +132,6 @@ class MaskUnetGenertor(nn.Module):
 
         for name, module in self.named_modules():
             if isinstance(module, Mask):
-                # print(module.get_weight_decay_loss().data.cpu(), module.get_weight_decay_loss().data.cpu()/module.mask_weight.size(0))
                 mask = module.get_current_mask()
 
                 logger.info('%s sparsity ratio: %.2f\tone ratio: %.2f\t'
@@ -280,7 +267,6 @@ class MaskPix2PixModel(nn.Module):
 
         lr = self.optimizers[0].param_groups[0]['lr']
         print('learning rate = %.7f' % lr)
-        # self.update_masklayer(epoch)
 
     def set_requires_grad(self, nets, requires_grad=False):
         if not isinstance(nets, list):
@@ -373,20 +359,9 @@ class MaskPix2PixModel(nn.Module):
 
     def get_mask_weight_loss(self, G):
         mask_weight_loss = 0.0
-        bound_loss_index = self.opt.bound_loss_index
-        loss_index = 0
         for name, module in G.named_modules():
             if isinstance(module, Mask):
-                if bound_loss_index[loss_index]:
-                    mask_weight_loss += module.get_weight_decay_loss() * self.opt.upconv_coeff * G.layer_sparsity_coeff[loss_index]
-                else:
-                    mask_weight_loss += module.get_weight_decay_loss() * G.layer_sparsity_coeff[loss_index]
-                loss_index += 1
-                # if (name == 'model.model.2.model.3.mask_weight' or name == 'model.model.2.model.8.mask_weight') \
-                #         and self.opt.upconv_bound:
-                #     mask_weight_loss += module.get_weight_decay_loss() * self.opt.upconv_coeff
-                # else:
-                #     mask_weight_loss += module.get_weight_decay_loss()
+                mask_weight_loss += module.get_weight_decay_loss()
         return mask_weight_loss
 
     def stable_weight(self, model, bound):

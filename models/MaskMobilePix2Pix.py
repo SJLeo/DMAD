@@ -91,12 +91,10 @@ class MaskMobileResnetGenerator(nn.Module):
         else:
             use_bias = norm_layer == nn.InstanceNorm2d
 
-        if self.opt.upconv_relu and not opt.upconv_solo:
-            upconv_mask_loss_type = 'uprelu'
-        elif self.opt.upconv_bound and not opt.upconv_solo:
+        if self.opt.upconv_bound:
             upconv_mask_loss_type = 'bound'
         else:
-            upconv_mask_loss_type = 'relu'
+            upconv_mask_loss_type = opt.mask_loss_type
 
         model = [nn.ReflectionPad2d(3),
                  nn.Conv2d(input_nc, ngf, kernel_size=7, padding=0, bias=use_bias),
@@ -324,7 +322,6 @@ class MaskMobilePix2PixModel(nn.Module):
 
         lr = self.optimizers[0].param_groups[0]['lr']
         print('learning rate = %.7f' % lr)
-        # self.update_masklayer(epoch)
 
     def set_requires_grad(self, nets, requires_grad=False):
         if not isinstance(nets, list):

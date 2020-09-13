@@ -370,7 +370,7 @@ class MobilePix2PixModel(nn.Module):
         self.total_feature_out_D_teacher = {}
 
         self.teacher_extract_G_layers = ['model.9', 'model.12', 'model.15', 'model.18']
-        self.teacher_extract_D_layers = ['model.4']#, 'model.10']
+        self.teacher_extract_D_layers = ['model.4']
         self.student_extract_G_layers = ['model.9', 'model.12', 'model.15', 'model.18']
 
         def get_activation(maps, name):
@@ -396,9 +396,6 @@ class MobilePix2PixModel(nn.Module):
                                       self.total_feature_out_D_teacher.values()]
         total_attention_student = [f.pow(2).mean(1, keepdim=True) for f in
                                         self.total_feature_out_student.values()]
-
-        # interpolate attention map from 31*31 to 64*64
-        # total_attention_D_teacher[1] = util.attention_interpolate(total_attention_D_teacher[1])
 
         total_mixup_attention = []
 

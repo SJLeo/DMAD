@@ -425,7 +425,7 @@ class CycleGANModel(nn.Module):
         self.total_feature_out_DB_teacher = {}
 
         self.teacher_extract_G_layers = ['model.9', 'model.12', 'model.15', 'model.18']
-        self.teacher_extract_D_layers = ['model.4'] #, 'model.10']
+        self.teacher_extract_D_layers = ['model.4']
         self.student_extract_G_layers = ['model.9', 'model.12', 'model.15', 'model.18']
 
         def get_activation(maps, name):
@@ -460,24 +460,16 @@ class CycleGANModel(nn.Module):
         total_attention_BtoA_student = [f.pow(2).mean(1, keepdim=True) for f in
                                         self.total_feature_out_BtoA_student.values()]
 
-        # total_attention_DA_teacher[1] = util.attention_interpolate(
-        #     total_attention_DA_teacher[1])  # interpolate attention map from 31*31 to 64*64
-        # total_attention_DB_teacher[1] = util.attention_interpolate(total_attention_DB_teacher[1])
-
         total_mixup_attention_AtoB = []
         total_mixup_attention_BtoA = []
 
         for i in range(len(total_attention_AtoB_teacher)):
-            if self.opt.solo:
-                total_mixup_attention_AtoB.append(total_attention_AtoB_teacher[i])
-                total_mixup_attention_BtoA.append(total_attention_BtoA_teacher[i])
-            else:
-                total_mixup_attention_AtoB.append(util.mixup_attention(
-                    [total_attention_AtoB_teacher[i], total_attention_DA_teacher[0]],
-                    [0.5, 0.5]))
-                total_mixup_attention_BtoA.append(util.mixup_attention(
-                    [total_attention_BtoA_teacher[i], total_attention_DB_teacher[0]],
-                    [0.5, 0.5]))
+            total_mixup_attention_AtoB.append(util.mixup_attention(
+                [total_attention_AtoB_teacher[i], total_attention_DA_teacher[0]],
+                [0.5, 0.5]))
+            total_mixup_attention_BtoA.append(util.mixup_attention(
+                [total_attention_BtoA_teacher[i], total_attention_DB_teacher[0]],
+                [0.5, 0.5]))
 
         total_distill_loss = 0.0
         for i in range(len(total_attention_AtoB_teacher)):

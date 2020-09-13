@@ -92,12 +92,10 @@ class MaskMobileResnetGenerator(nn.Module):
         else:
             use_bias = norm_layer == nn.InstanceNorm2d
 
-        if self.opt.upconv_relu and not opt.upconv_solo:
-            upconv_mask_loss_type = 'uprelu'
-        elif self.opt.upconv_bound and not opt.upconv_solo:
+        if self.opt.upconv_bound:
             upconv_mask_loss_type = 'bound'
         else:
-            upconv_mask_loss_type = 'relu'
+            upconv_mask_loss_type = opt.mask_loss_type
 
         model = [nn.ReflectionPad2d(3),
                  nn.Conv2d(input_nc, ngf, kernel_size=7, padding=0, bias=use_bias),
@@ -256,10 +254,6 @@ class MaskMobileCycleGANModel(nn.Module):
         self.fake_A_pool = ImagePool(50)
         self.fake_B_pool = ImagePool(50)
 
-        if self.opt.use_pretrain_d: # using pretrain model's discriminator to initial
-            print('using pretrian discriminator')
-            self.init_discriminator()
-
         self.group_mask_weight_names = []
         self.group_mask_weight_names.append('model.11')
         for i in range(13, 22, 1):
@@ -376,7 +370,6 @@ class MaskMobileCycleGANModel(nn.Module):
 
         lr = self.optimizers[0].param_groups[0]['lr']
         print('learning rate = %.7f' % lr)
-        # self.update_masklayer(epoch) # update mask alpha
 
     def set_requires_grad(self, nets, requires_grad=False):
         if not isinstance(nets, list):
@@ -505,15 +498,6 @@ class MaskMobileCycleGANModel(nn.Module):
                     mask_weight_loss += module.get_weight_decay_loss()
 
         return mask_weight_loss
-
-    def init_discriminator(self):
-
-        if self.opt.pretrain_path is None or not os.path.exists(self.opt.pretrain_path):
-            raise FileExistsError('The pretrain model path must be exist!!!')
-        ckpt = torch.load(self.opt.pretrain_path, map_location=self.device)
-        self.netD_A.load_state_dict(ckpt['D_A'])
-        self.netD_B.load_state_dict(ckpt['D_B'])
-        print('load pretrain discriminator weight done!!!')
 
     def stable_weight(self, model, bound):
 
@@ -799,20 +783,3 @@ class MaskMobileCycleGANModel(nn.Module):
 
         logger.info('Prune done!!!')
         return pruned_model
-
-# class opts():
-#     mask_loss_type = 'relu'
-#     upconv_solo = True,
-#     upconv_bound = True,
-#     upconv_relu = False
-# moblie_model = MobileResnetGenerator(input_nc=3, output_nc=3, ngf=64, opt=opts())
-# print(moblie_model)
-#
-# for k, v in moblie_model.state_dict().items():
-#     print(k, v.size())
-#
-# input = torch.randn((1, 3, 256, 256))
-# print(moblie_model(input).size())
-#
-# macs, params = profile(moblie_model, (input, ))
-# print(macs, params)

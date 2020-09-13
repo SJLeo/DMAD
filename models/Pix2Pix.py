@@ -349,11 +349,7 @@ class Pix2PixModel(nn.Module):
                                         'model.model.1.model.3.model.3.model.2',
                                         'model.model.1.model.3.model.3.model.3.model.6',
                                         'model.model.1.model.3.model.6']
-        self.teacher_extract_D_layers = ['model.4']#, 'model.10']
-        # self.student_extract_G_layers = ['model.model.1.model.2',
-        #                                  # 'model.model.1.model.3.model.3.model.3.model.2',
-        #                                  # 'model.model.1.model.3.model.3.model.3.model.3.model.6',
-        #                                  'model.model.1.model.3.model.6']
+        self.teacher_extract_D_layers = ['model.4']
 
         def get_activation(maps, name):
             def get_output_hook(module, input, output):
@@ -379,13 +375,9 @@ class Pix2PixModel(nn.Module):
         total_attention_student = [f.pow(2).mean(1, keepdim=True) for f in
                                    self.total_feature_out_student.values()]
 
-        # interpolate D's 31*31 to 64*64 attention map
-        # total_attention_D_teacher[1] = util.attention_interpolate(total_attention_D_teacher[1])
-
         # interpolate D's size to 8*8 attention map
         total_attention_D_teacher_16x16 = [
             util.attention_interpolate(total_attention_D_teacher[0], (16, 16)),
-            # util.attention_interpolate(total_attention_D_teacher[1], (8, 8))
         ]
 
         total_mixup_attention = []
