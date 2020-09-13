@@ -86,7 +86,7 @@ We provide our compressed models in the experiments.
 |  Pix2Pix  |  cityscapes   |      3.96G (4.70×)       |         1.73M (31.4×)          | mIOU:40.53 | [Link](https://drive.google.com/file/d/1Yh7Hn28cEk8A19HaH_hALpskmulREvPF/view?usp=sharing) |
 | Pix2Pix*  |  cityscapes   |      4.39G (4.24×)       |         0.55M (98.9×)          | mIOU:41.47 | [Link](https://drive.google.com/file/d/1g-GtEc_ev8yjpyjeqqDMgqnRKOYF3r3M/view?usp=sharing) |
 
-[^*]: indicates that a generator with separable convolu-tions is adopted
+[^*]: indicates that a generator with separable convolutions is adopted
 
 You can use the following code to test our compression models.
 
@@ -99,4 +99,4 @@ python test.py
 
 ### Tips
 
-Any problem, free to contact the authors via emails:[shaojieli@stu.xmu.edu.cn](mailto:shaojieli@stu.xmu.edu.cn) or [lmbxmu@stu.xmu.edu.cn](mailto:lmbxmu@stu.xmu.edu.cn) .
+Any problem, free to contact the authors via emails:[shaojieli@stu.xmu.edu.cn](mailto:shaojieli@stu.xmu.edu.cn).
