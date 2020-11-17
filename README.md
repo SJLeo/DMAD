@@ -4,6 +4,14 @@
 
 Framework of our method. We first build a pre-trained model similar to a GAN network, upon which a differentiable mask is imposed to scale the convolutional outputs of the generator and derive a light-weight one. Then, the co-Attention of the pre-trained GAN and the outputs of the last-layer convolutions of the discriminator are distilled to stabilize the training of the light-weight model.
 
+
+
+### Tips
+
+Any problem, free to contact the authors via emails:[shaojieli@stu.xmu.edu.cn](mailto:shaojieli@stu.xmu.edu.cn).
+
+
+
 ### Getting Started
 
 The code has been tested using Pytorch1.5.1 and CUDA10.2 on Ubuntu 18.04.
@@ -96,7 +104,3 @@ python test.py
 --model cyclegan
 --load_path ./result/horse2zebra.pth
 ```
-
-### Tips
-
-Any problem, free to contact the authors via emails:[shaojieli@stu.xmu.edu.cn](mailto:shaojieli@stu.xmu.edu.cn).
