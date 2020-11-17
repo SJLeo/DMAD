@@ -8,7 +8,7 @@ Framework of our method. We first build a pre-trained model similar to a GAN net
 
 ### Tips
 
-Any problem, free to contact the authors via emails:[shaojieli@stu.xmu.edu.cn](mailto:shaojieli@stu.xmu.edu.cn).
+Any problem, free to contact the first authors via emails:[shaojieli@stu.xmu.edu.cn](mailto:shaojieli@stu.xmu.edu.cn).
 
 
 
