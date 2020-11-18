@@ -104,3 +104,7 @@ python test.py
 --model cyclegan
 --load_path ./result/horse2zebra.pth
 ```
+
+## Acknowledgements
+
+Our code is developed based on [pytorch-CycleGAN-and-pix2pix](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix) and [GAN Compression](https://github.com/mit-han-lab/gan-compression).
