@@ -42,13 +42,27 @@ to install dependencies.
 - Train the model using our differentiable masks (eg. horse2zebra)
 
   ```shell
-  bash scripts/cyclegan/horse2zebra/train.sh
+  python train.py --dataroot ./database/horse2zebra \
+  --model cyclegan \
+  --mask \
+  --mask_weight_decay 0.001 \
+  --lambda_update_coeff 1.0 \
+  --name mask_horse2zebra
   ```
 
 - Finetune the searched light-weight models with co-Attention distillation
 
   ```shell
-  bash scripts/cyclegan/horse2zebra/finetune.sh
+  python prune.py --dataroot ./database/horse2zebra \
+  --model cyclegan \
+  --mask \
+  --checkpoints_dir ./experiments/mask_horse2zebra \
+  --name pruned_horse2zebra \
+  --load_path ./experiments/mask_horse2zebra/model_best.pth \
+  --finetune \
+  --lambda_attention_distill 100.0 \
+  --lambda_discriminator_distill 0.0001 \
+  --pretrain_path ../pretrain/horse2zebra_pretrain.pth
   ```
 
 #### Pix2Pix
@@ -69,13 +83,33 @@ to install dependencies.
 - Train the model using our differentiable masks (eg. edges2shoes)
 
   ```shell
-  bash scripts/pix2pix/edges2shoes/train.sh
+  python train.py --dataroot ./database/edges2shoes-r \
+  --model pix2pix \
+  --mask \
+  --mask_weight_decay 0.01 \
+  --load_size 256 \
+  --no_flip \
+  --batch_size 4 \
+  --name mask_edges2shoes
   ```
 
 - Finetune the searched light-weight models with co-Attention distillation
 
   ```shell
-  bash scripts/pix2pix/edges2shoes/finetune.sh
+  python prune.py --dataroot ./database/edges2shoes-r \
+  --model pix2pix \
+  --mask \
+  --checkpoints_dir ./experiments/mask_edges2shoes \
+  --name pruned_edges2shoes \
+  --load_path ./experiments/mask_edges2shoes/model_best.pth \
+  --gpu_ids 0 \
+  --load_size 256 \
+  --no_flip \
+  --batch_size 4 \
+  --finetune \
+  --lambda_attention_distill 10.0 \
+  --lambda_discriminator_distill 0.0001 \
+  --pretrain_path ../pretrain/edges2shoes_pretrain.pth
   ```
 
 ## Acknowledgements
