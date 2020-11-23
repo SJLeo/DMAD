@@ -102,7 +102,6 @@ to install dependencies.
   --checkpoints_dir ./experiments/mask_edges2shoes \
   --name pruned_edges2shoes \
   --load_path ./experiments/mask_edges2shoes/model_best.pth \
-  --gpu_ids 0 \
   --load_size 256 \
   --no_flip \
   --batch_size 4 \
