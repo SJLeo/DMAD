@@ -1,4 +1,4 @@
-## Learning Efficient GANs using Differentiable Masks and Co-Attention Distillation ([Link](http://arxiv.org/abs/2011.08382))![]( https://visitor-badge.glitch.me/badge?page_id=sjleo.dmad).
+## Learning Efficient GANs for Image Translation via Differentiable Masks and co-Attention Distillation ([Link](http://arxiv.org/abs/2011.08382))![]( https://visitor-badge.glitch.me/badge?page_id=sjleo.dmad).
 
 <div align=center><img src="img/framework.png" height = "50%" width = "60%"/></div>
 
