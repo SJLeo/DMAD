@@ -1,5 +1,5 @@
 dominate==2.5.1
-numpy==1.18.1
+numpy==1.22.0
 opencv-python==4.3.0.36
 scipy==1.2.1
 six==1.14.0
